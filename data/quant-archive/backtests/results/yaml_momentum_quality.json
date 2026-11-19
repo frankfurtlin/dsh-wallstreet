@@ -1,0 +1,48 @@
+{
+  "name": "yaml_momentum_quality",
+  "display_name": "趋势质量(YAML)",
+  "category": "yaml_equiv",
+  "description": "对应 momentum_quality.yaml。",
+  "ts": "2026-10-10T00:05:46.177673",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 30,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.3201,
+    "bench": 0.2504,
+    "alpha": 0.0697,
+    "mdd": -0.0964,
+    "winrate": 0.5,
+    "n": 10,
+    "turnover": 0.22,
+    "ex_beta": 0.0158,
+    "ex_beta_t": 0.68,
+    "act_ex": 0.0078,
+    "act_t": 0.3,
+    "act_win": 0.5
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "超额极小 α=+6.97% t=0.68",
+    "scenario": "与 YAML 声明式策略横向对比的参照版; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.3201,
+      "alpha": 0.0697,
+      "mdd": -0.0964,
+      "winrate": 0.5,
+      "t": 0.68,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": 0.44972
+}

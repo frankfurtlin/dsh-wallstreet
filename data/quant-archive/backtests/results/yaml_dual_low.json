@@ -1,0 +1,50 @@
+{
+  "name": "yaml_dual_low",
+  "display_name": "双低选股(YAML)",
+  "category": "yaml_equiv",
+  "description": "对应 dual_low.yaml (低PE+低PB)。",
+  "ts": "2026-10-10T00:05:31.787401",
+  "best_variant": {
+    "exit": {
+      "stop_loss": -0.08
+    },
+    "hold": 40,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.0287,
+    "bench": 0.2504,
+    "alpha": -0.2217,
+    "mdd": -0.0422,
+    "winrate": 0.5,
+    "n": 10,
+    "turnover": 0.235,
+    "ex_beta": -0.0146,
+    "ex_beta_t": -0.6,
+    "act_ex": -0.0223,
+    "act_t": -0.83,
+    "act_win": 0.5
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-22.17% t=-0.60",
+    "scenario": "与 YAML 声明式策略横向对比的参照版; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.0287,
+      "alpha": -0.2217,
+      "mdd": -0.0422,
+      "winrate": 0.5,
+      "t": -0.6,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": -0.24542
+}

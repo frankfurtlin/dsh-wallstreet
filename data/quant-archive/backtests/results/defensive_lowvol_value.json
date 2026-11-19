@@ -1,0 +1,48 @@
+{
+  "name": "defensive_lowvol_value",
+  "display_name": "防御(低波+价值)",
+  "category": "defensive",
+  "description": "熊市友好: 低波+价值主导。",
+  "ts": "2026-10-10T00:04:44.896466",
+  "best_variant": {
+    "exit": {},
+    "hold": 10,
+    "topk": 30,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 35
+  },
+  "metrics": {
+    "total": 0.1723,
+    "bench": 0.2504,
+    "alpha": -0.0781,
+    "mdd": -0.0522,
+    "winrate": 0.537,
+    "n": 41,
+    "turnover": 0.155,
+    "ex_beta": -0.0049,
+    "ex_beta_t": -0.91,
+    "act_ex": -0.0025,
+    "act_t": -0.35,
+    "act_win": 0.537
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-7.81% t=-0.91",
+    "scenario": "防守型, 适合熊市/震荡市降低波动; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.1723,
+      "alpha": -0.0781,
+      "mdd": -0.0522,
+      "winrate": 0.537,
+      "t": -0.91,
+      "n_periods": 41
+    }
+  },
+  "n_variants": 45,
+  "score": -0.08266
+}

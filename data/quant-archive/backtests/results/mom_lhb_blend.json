@@ -1,0 +1,48 @@
+{
+  "name": "mom_lhb_blend",
+  "display_name": "动量+龙虎榜",
+  "category": "lhb",
+  "description": "动量与龙虎榜净买融合(趋势+主力强化)。",
+  "ts": "2026-10-10T00:07:29.367275",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 35
+  },
+  "metrics": {
+    "total": 0.2882,
+    "bench": 0.2504,
+    "alpha": 0.0378,
+    "mdd": -0.1586,
+    "winrate": 0.5,
+    "n": 10,
+    "turnover": 0.235,
+    "ex_beta": 0.0177,
+    "ex_beta_t": 0.52,
+    "act_ex": 0.0097,
+    "act_t": 0.27,
+    "act_win": 0.5
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "超额极小 α=+3.78% t=0.52",
+    "scenario": "龙虎榜主力资金跟踪, 适合事件驱动短线; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "中等回撤, 建议小仓位试运行",
+    "evidence": {
+      "total": 0.2882,
+      "alpha": 0.0378,
+      "mdd": -0.1586,
+      "winrate": 0.5,
+      "t": 0.52,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": 0.33558
+}

@@ -1,0 +1,50 @@
+{
+  "name": "lhb_inst_only",
+  "display_name": "机构席位(纯)",
+  "category": "lhb",
+  "description": "纯机构净买信号: 买龙虎榜含机构买入者。",
+  "ts": "2026-10-10T00:07:13.609758",
+  "best_variant": {
+    "exit": {
+      "trailing_stop": 0.05
+    },
+    "hold": 10,
+    "topk": 20,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 25
+  },
+  "metrics": {
+    "total": 0.4141,
+    "bench": 0.2504,
+    "alpha": 0.1637,
+    "mdd": -0.1188,
+    "winrate": 0.512,
+    "n": 41,
+    "turnover": 0.915,
+    "ex_beta": -0.0003,
+    "ex_beta_t": -0.03,
+    "act_ex": 0.003,
+    "act_t": 0.3,
+    "act_win": 0.512
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "超额极小 α=+16.37% t=-0.03",
+    "scenario": "龙虎榜主力资金跟踪, 适合事件驱动短线; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.4141,
+      "alpha": 0.1637,
+      "mdd": -0.1188,
+      "winrate": 0.512,
+      "t": -0.03,
+      "n_periods": 41
+    }
+  },
+  "n_variants": 45,
+  "score": 0.44692
+}

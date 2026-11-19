@@ -1,0 +1,48 @@
+{
+  "name": "balanced_equal",
+  "display_name": "均衡等权",
+  "category": "balanced",
+  "description": "反转/动量/小盘/低波/价值/质量 等权。",
+  "ts": "2026-10-10T00:04:36.969356",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.126,
+    "bench": 0.2504,
+    "alpha": -0.1244,
+    "mdd": -0.0956,
+    "winrate": 0.5,
+    "n": 10,
+    "turnover": 0.283,
+    "ex_beta": -0.0044,
+    "ex_beta_t": -0.29,
+    "act_ex": -0.0121,
+    "act_t": -0.64,
+    "act_win": 0.5
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-12.44% t=-0.29",
+    "scenario": "均衡多因子, 全天候观察池; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.126,
+      "alpha": -0.1244,
+      "mdd": -0.0956,
+      "winrate": 0.5,
+      "t": -0.29,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": -0.05444
+}

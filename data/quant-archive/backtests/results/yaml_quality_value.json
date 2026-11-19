@@ -1,0 +1,48 @@
+{
+  "name": "yaml_quality_value",
+  "display_name": "稳健价值(YAML)",
+  "category": "yaml_equiv",
+  "description": "对应 quality_value.yaml。",
+  "ts": "2026-10-10T00:06:00.751605",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.2594,
+    "bench": 0.2504,
+    "alpha": 0.009,
+    "mdd": -0.0712,
+    "winrate": 0.4,
+    "n": 10,
+    "turnover": 0.235,
+    "ex_beta": 0.0067,
+    "ex_beta_t": 0.5,
+    "act_ex": -0.001,
+    "act_t": -0.06,
+    "act_win": 0.4
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "超额极小 α=+0.90% t=0.50",
+    "scenario": "与 YAML 声明式策略横向对比的参照版; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.2594,
+      "alpha": 0.009,
+      "mdd": -0.0712,
+      "winrate": 0.4,
+      "t": 0.5,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": 0.3292
+}

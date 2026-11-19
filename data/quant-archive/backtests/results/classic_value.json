@@ -1,0 +1,48 @@
+{
+  "name": "classic_value",
+  "display_name": "经典价值",
+  "category": "multi_factor",
+  "description": "低价PE+PB+质量, Graham 式深度价值。",
+  "ts": "2026-10-10T00:04:05.189300",
+  "best_variant": {
+    "exit": {},
+    "hold": 10,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.1212,
+    "bench": 0.2504,
+    "alpha": -0.1293,
+    "mdd": -0.1471,
+    "winrate": 0.512,
+    "n": 41,
+    "turnover": 0.193,
+    "ex_beta": -0.0062,
+    "ex_beta_t": -1.01,
+    "act_ex": -0.0033,
+    "act_t": -0.42,
+    "act_win": 0.512
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-12.93% t=-1.01",
+    "scenario": "经典多因子组合; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "中等回撤, 建议小仓位试运行",
+    "evidence": {
+      "total": 0.1212,
+      "alpha": -0.1293,
+      "mdd": -0.1471,
+      "winrate": 0.512,
+      "t": -1.01,
+      "n_periods": 41
+    }
+  },
+  "n_variants": 45,
+  "score": -0.23193
+}

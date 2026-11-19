@@ -1,0 +1,48 @@
+{
+  "name": "classic_lowvol_dividend",
+  "display_name": "经典低波红利",
+  "category": "multi_factor",
+  "description": "低波 + 价值 + 质量, 防御收息。",
+  "ts": "2026-10-10T00:04:27.837071",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.1692,
+    "bench": 0.2504,
+    "alpha": -0.0812,
+    "mdd": -0.0349,
+    "winrate": 0.5,
+    "n": 10,
+    "turnover": 0.235,
+    "ex_beta": -0.0003,
+    "ex_beta_t": -0.02,
+    "act_ex": -0.0092,
+    "act_t": -0.4,
+    "act_win": 0.5
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-8.12% t=-0.02",
+    "scenario": "经典多因子组合; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.1692,
+      "alpha": -0.0812,
+      "mdd": -0.0349,
+      "winrate": 0.5,
+      "t": -0.02,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": 0.09903
+}

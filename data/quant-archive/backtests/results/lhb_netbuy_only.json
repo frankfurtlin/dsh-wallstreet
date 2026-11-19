@@ -1,0 +1,51 @@
+{
+  "name": "lhb_netbuy_only",
+  "display_name": "龙虎榜净买(纯)",
+  "category": "lhb",
+  "description": "纯龙虎榜净买额信号: 买主力净买入最强者。",
+  "ts": "2026-10-10T00:07:07.658384",
+  "best_variant": {
+    "exit": {
+      "stop_loss": -0.08,
+      "take_profit": 0.15
+    },
+    "hold": 20,
+    "topk": 20,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 25
+  },
+  "metrics": {
+    "total": 0.3441,
+    "bench": 0.2504,
+    "alpha": 0.0936,
+    "mdd": -0.078,
+    "winrate": 0.55,
+    "n": 20,
+    "turnover": 0.945,
+    "ex_beta": 0.003,
+    "ex_beta_t": 0.41,
+    "act_ex": 0.0024,
+    "act_t": 0.23,
+    "act_win": 0.55
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "超额极小 α=+9.36% t=0.41",
+    "scenario": "龙虎榜主力资金跟踪, 适合事件驱动短线; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.3441,
+      "alpha": 0.0936,
+      "mdd": -0.078,
+      "winrate": 0.55,
+      "t": 0.41,
+      "n_periods": 20
+    }
+  },
+  "n_variants": 45,
+  "score": 0.44326
+}

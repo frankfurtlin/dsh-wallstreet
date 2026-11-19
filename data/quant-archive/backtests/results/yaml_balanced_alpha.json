@@ -1,0 +1,48 @@
+{
+  "name": "yaml_balanced_alpha",
+  "display_name": "均衡多因子(YAML)",
+  "category": "yaml_equiv",
+  "description": "对应 balanced_alpha.yaml。",
+  "ts": "2026-10-10T00:05:09.385320",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.1512,
+    "bench": 0.2504,
+    "alpha": -0.0993,
+    "mdd": -0.0378,
+    "winrate": 0.5,
+    "n": 10,
+    "turnover": 0.235,
+    "ex_beta": -0.0033,
+    "ex_beta_t": -0.14,
+    "act_ex": -0.011,
+    "act_t": -0.43,
+    "act_win": 0.5
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-9.93% t=-0.14",
+    "scenario": "与 YAML 声明式策略横向对比的参照版; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.1512,
+      "alpha": -0.0993,
+      "mdd": -0.0378,
+      "winrate": 0.5,
+      "t": -0.14,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": 0.04472
+}

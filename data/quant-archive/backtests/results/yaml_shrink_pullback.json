@@ -1,0 +1,48 @@
+{
+  "name": "yaml_shrink_pullback",
+  "display_name": "缩量回踩(YAML)",
+  "category": "yaml_equiv",
+  "description": "对应 shrink_pullback.yaml (趋势+低波)。",
+  "ts": "2026-10-10T00:06:08.412881",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.1895,
+    "bench": 0.2504,
+    "alpha": -0.061,
+    "mdd": -0.011,
+    "winrate": 0.5,
+    "n": 10,
+    "turnover": 0.235,
+    "ex_beta": 0.0003,
+    "ex_beta_t": 0.01,
+    "act_ex": -0.0077,
+    "act_t": -0.32,
+    "act_win": 0.5
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-6.10% t=0.01",
+    "scenario": "与 YAML 声明式策略横向对比的参照版; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.1895,
+      "alpha": -0.061,
+      "mdd": -0.011,
+      "winrate": 0.5,
+      "t": 0.01,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": 0.1494
+}

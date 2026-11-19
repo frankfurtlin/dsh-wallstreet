@@ -1,0 +1,48 @@
+{
+  "name": "balanced_zt_neutral",
+  "display_name": "均衡+涨停中性",
+  "category": "non_price",
+  "description": "均衡因子 + 涨停信号, 行业/市值中性。",
+  "ts": "2026-10-10T00:07:01.602654",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 20,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.2676,
+    "bench": 0.2504,
+    "alpha": 0.0171,
+    "mdd": -0.0661,
+    "winrate": 0.4,
+    "n": 10,
+    "turnover": 0.24,
+    "ex_beta": 0.0078,
+    "ex_beta_t": 1.05,
+    "act_ex": 0.0006,
+    "act_t": 0.06,
+    "act_win": 0.4
+  },
+  "conclusion": {
+    "grade": "边缘",
+    "verdict": "超额为正但不显著 α=+1.71% t=1.05",
+    "scenario": "涨停/情绪类非价量信号, 短线情绪驱动; 回撤可控, 适合核心观察池; 建议仅作观察, 勿据此实盘",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.2676,
+      "alpha": 0.0171,
+      "mdd": -0.0661,
+      "winrate": 0.4,
+      "t": 1.05,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": 0.45481
+}

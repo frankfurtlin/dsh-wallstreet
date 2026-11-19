@@ -1,0 +1,48 @@
+{
+  "name": "ml_ridge_basic",
+  "display_name": "ML岭回归",
+  "category": "ml",
+  "description": "基础特征工程+岭回归预测",
+  "ts": "2026-10-10T00:08:49.917244",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 20,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.2489,
+    "bench": 0.2504,
+    "alpha": -0.0015,
+    "mdd": -0.0948,
+    "winrate": 0.3,
+    "n": 10,
+    "turnover": 0.235,
+    "ex_beta": 0.0068,
+    "ex_beta_t": 0.42,
+    "act_ex": -0.0009,
+    "act_t": -0.05,
+    "act_win": 0.3
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-0.15% t=0.42",
+    "scenario": "机器学习非线性捕捉, 需持续监控过拟合; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.2489,
+      "alpha": -0.0015,
+      "mdd": -0.0948,
+      "winrate": 0.3,
+      "t": 0.42,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": 0.2846
+}

@@ -1,0 +1,48 @@
+{
+  "name": "sector_rotation_top",
+  "display_name": "行业轮动(强)",
+  "category": "sector_rot",
+  "description": "直接选行业强度最高的股票",
+  "ts": "2026-10-10T00:08:04.618796",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.1538,
+    "bench": 0.2504,
+    "alpha": -0.0967,
+    "mdd": -0.1138,
+    "winrate": 0.4,
+    "n": 10,
+    "turnover": 0.25,
+    "ex_beta": -0.0004,
+    "ex_beta_t": -0.02,
+    "act_ex": -0.0081,
+    "act_t": -0.38,
+    "act_win": 0.4
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-9.67% t=-0.02",
+    "scenario": "行业轮动, 适合板块结构性行情; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.1538,
+      "alpha": -0.0967,
+      "mdd": -0.1138,
+      "winrate": 0.4,
+      "t": -0.02,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": 0.03488
+}

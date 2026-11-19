@@ -1,0 +1,48 @@
+{
+  "name": "zt_lbt_only",
+  "display_name": "涨停连板(纯)",
+  "category": "non_price",
+  "description": "纯连板数信号: 买昨日涨停且连板最高者。",
+  "ts": "2026-10-10T00:06:20.284328",
+  "best_variant": {
+    "exit": {},
+    "hold": 10,
+    "topk": 20,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 30
+  },
+  "metrics": {
+    "total": 0.0,
+    "bench": 0.2504,
+    "alpha": -0.2504,
+    "mdd": 0.0,
+    "winrate": 0.195,
+    "n": 41,
+    "turnover": NaN,
+    "ex_beta": null,
+    "ex_beta_t": null,
+    "act_ex": null,
+    "act_t": null,
+    "act_win": null
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-25.04% t=0.00",
+    "scenario": "涨停/情绪类非价量信号, 短线情绪驱动; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.0,
+      "alpha": -0.2504,
+      "mdd": -0.0,
+      "winrate": 0.195,
+      "t": 0.0,
+      "n_periods": 41
+    }
+  },
+  "n_variants": 45,
+  "score": -0.15024
+}

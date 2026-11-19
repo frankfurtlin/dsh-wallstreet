@@ -1,0 +1,48 @@
+{
+  "name": "mom_zt_blend",
+  "display_name": "动量+涨停",
+  "category": "non_price",
+  "description": "动量与涨停强度融合(趋势+情绪强化)。",
+  "ts": "2026-10-10T00:06:38.100122",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 40,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 35
+  },
+  "metrics": {
+    "total": 0.0445,
+    "bench": 0.2504,
+    "alpha": -0.206,
+    "mdd": -0.1349,
+    "winrate": 0.4,
+    "n": 10,
+    "turnover": 0.235,
+    "ex_beta": -0.006,
+    "ex_beta_t": -0.23,
+    "act_ex": -0.014,
+    "act_t": -0.5,
+    "act_win": 0.4
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-20.60% t=-0.23",
+    "scenario": "涨停/情绪类非价量信号, 短线情绪驱动; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "中等回撤, 建议小仓位试运行",
+    "evidence": {
+      "total": 0.0445,
+      "alpha": -0.206,
+      "mdd": -0.1349,
+      "winrate": 0.4,
+      "t": -0.23,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": -0.19255
+}

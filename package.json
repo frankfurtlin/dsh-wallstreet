@@ -1,0 +1,44 @@
+{
+  "name": "dsh-wallstreet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "「华尔街之狼」DSH 插件：投资研究面板一期（市场概览）—— A 股/港股/美股指数、市场宽度、成交额、板块轮动与市场温度分析，数据由宿主进程抓取并缓存，仅 DSH 登录用户可访问。",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  },
+  "files": [
+    "lib",
+    "client.js",
+    "cordis.patch.yml",
+    "verification",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "node --check lib/index.js && node --check lib/market.js && node --check client.js",
+    "verify:api": "node verification/verify-api.mjs",
+    "verify:quant-api": "node verification/verify-quant-api.mjs",
+    "verify:quant-ui": "node verification/verify-quant-ui.mjs"
+  }
+}

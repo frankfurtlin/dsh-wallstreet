@@ -1,0 +1,48 @@
+{
+  "name": "yaml_volume_breakout",
+  "display_name": "放量突破(YAML)",
+  "category": "yaml_equiv",
+  "description": "对应 volume_breakout.yaml (动量+流动性)。",
+  "ts": "2026-10-10T00:06:15.660055",
+  "best_variant": {
+    "exit": {},
+    "hold": 40,
+    "topk": 30,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.0766,
+    "bench": 0.2504,
+    "alpha": -0.1739,
+    "mdd": -0.139,
+    "winrate": 0.4,
+    "n": 10,
+    "turnover": 0.22,
+    "ex_beta": -0.0019,
+    "ex_beta_t": -0.06,
+    "act_ex": -0.0099,
+    "act_t": -0.3,
+    "act_win": 0.4
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-17.39% t=-0.06",
+    "scenario": "与 YAML 声明式策略横向对比的参照版; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "中等回撤, 建议小仓位试运行",
+    "evidence": {
+      "total": 0.0766,
+      "alpha": -0.1739,
+      "mdd": -0.139,
+      "winrate": 0.4,
+      "t": -0.06,
+      "n_periods": 10
+    }
+  },
+  "n_variants": 45,
+  "score": -0.10924
+}

@@ -1,0 +1,51 @@
+{
+  "name": "reversal_quality",
+  "display_name": "反转+质量",
+  "category": "balanced",
+  "description": "超跌 + 质量把关, 避免价值陷阱。",
+  "ts": "2026-10-10T00:05:00.409388",
+  "best_variant": {
+    "exit": {
+      "stop_loss": -0.05,
+      "take_profit": 0.1
+    },
+    "hold": 20,
+    "topk": 30,
+    "cost_mode": "cn"
+  },
+  "baseline": {
+    "exit": {},
+    "hold": 20,
+    "topk": 40
+  },
+  "metrics": {
+    "total": 0.2216,
+    "bench": 0.2504,
+    "alpha": -0.0288,
+    "mdd": -0.0595,
+    "winrate": 0.4,
+    "n": 20,
+    "turnover": 0.18,
+    "ex_beta": -0.0022,
+    "ex_beta_t": -0.35,
+    "act_ex": -0.0029,
+    "act_t": -0.26,
+    "act_win": 0.4
+  },
+  "conclusion": {
+    "grade": "无效",
+    "verdict": "跑输基准 α=-2.88% t=-0.35",
+    "scenario": "均衡多因子, 全天候观察池; 无稳定超额, 不建议实盘, 仅留档对比",
+    "risk_note": "回撤可控, 适合核心观察池",
+    "evidence": {
+      "total": 0.2216,
+      "alpha": -0.0288,
+      "mdd": -0.0595,
+      "winrate": 0.4,
+      "t": -0.35,
+      "n_periods": 20
+    }
+  },
+  "n_variants": 45,
+  "score": 0.10457
+}
