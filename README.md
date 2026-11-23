@@ -1,4 +1,44 @@
-# dsh-wallstreet（华尔街之狼）
+<div align="center">
+
+# dsh-wallstreet 「华尔街之狼」
+
+**DSH 里的投资研究面板：A 股/港股/美股盘面、异动盯盘、研究归档与策略口径。**
+
+An investment-research panel for DSH — market overview, moves, research archive and strategy rules for A-shares, Hong Kong and US markets.
+
+[![Version](https://img.shields.io/badge/version-0.3.0-blue)](package.json)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Platform](https://img.shields.io/badge/DSH-DeepSeek%20Harness-5b5ef7)](https://github.com/frankfurtlin/dsh-pocket)
+
+[中文](README.md) · [English](README.en.md)
+
+</div>
+
+![盘面视图](verification/shots/wallstreet-panel.png)
+
+## 这是什么
+
+华尔街之狼是挂在 DSH Web 侧栏的投资研究面板，三个视图分别对应看盘、盯异动和查研究：盘面看指数、分时、市场温度与宽度；异动看涨停池、龙虎榜、涨跌幅榜与行业资金；研究读归档结论、估值分位、两融、持仓集中度，并带策略口径计算与资料检索。
+
+它解决的问题是这些数据平时散在多个网站和本地脚本里：盘中要实时、盘后要对齐同一份落盘快照，还要能一眼看出「现在是实时还是 T-1」。面板按交易时段自动选路（盘中走实时源、盘后读 market-report 落盘文件），并在页头与分区角标标出数据口径，不让人把快照数据当成盘中数据。
+
+## 功能
+
+- **盘面**：全球 10 个指数、上证分时（含涨跌幅 Y 轴与十字线）、市场温度 0–100、市场宽度、板块轮动、上证 60 日日 K。
+- **异动**：涨停池（含连板数）、龙虎榜、全市场涨跌幅前 8/后 8、行业资金净流入/流出，个股可点开弹层看报价、分时与日 K。
+- **研究**：归档研究结论与 34 份回测、估值分位 / 两融 / 股指期货 / 商品、持仓集中度、近 40 个交易日市场情绪历史。
+- **策略口径**：8 个纯函数（配置表、风控红线、分级止损、年度熔断、网格计划、双低筛选、轮动打分、收益归因），10 万 / 50 万两套画像。
+- **资料检索**：妙想金融资讯与 Tavily 全网两个引擎，补上面板原有资讯只有最近几小时时间流的缺口。
+- **数据分层**：盘中实时（60 秒缓存）、盘中慢数据（收盘快照）、盘后统一读落盘 JSON 三层，失败按分区降级并标注来源。
+- **只读安全**：不接账户、不下单、不存用户数据；所有接口先过 DSH 登录闸门，未登录 401、非受信 Host 403。
+
+## 安装
+
+```bash
+# DSH 插件页 → 添加插件 → 填 /root/workspace/plugins/dsh-wallstreet → 安装 → 打开开关
+# 或：plugin_manager install_bundle, target=/root/workspace/plugins/dsh-wallstreet
+systemctl restart deepseek-harness   # 让新的 cordis patch 生效
+```
 
 投资研究面板。挂在 DSH Web 侧栏，排在「紫微斗数」之后，工具栏分三个视图：
 
