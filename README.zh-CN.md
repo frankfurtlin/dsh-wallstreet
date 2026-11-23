@@ -4,11 +4,8 @@
 
 **DSH 里的投资研究面板：A 股/港股/美股盘面、异动盯盘、研究归档与策略口径。**
 
-An investment-research panel for DSH — market overview, moves, research archive and strategy rules for A-shares, Hong Kong and US markets.
-
 [![Version](https://img.shields.io/badge/version-0.3.0-blue)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Platform](https://img.shields.io/badge/DSH-DeepSeek%20Harness-5b5ef7)](https://github.com/frankfurtlin/dsh-pocket)
 
 [English](README.md) · **简体中文**
 
