@@ -14,7 +14,7 @@ An investment-research panel for DSH — market overview, moves, research archiv
 
 </div>
 
-![盘面视图](verification/shots/wallstreet-panel.png)
+![盘面视图](docs/screenshots/hero.png)
 
 ## 这是什么
 

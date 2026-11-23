@@ -10,7 +10,7 @@ An investment-research panel for DSH — market overview, intraday moves, resear
 
 [中文](README.md) · [English](README.en.md)
 
-![Market view](verification/shots/wallstreet-panel.png)
+![Market view](docs/screenshots/hero.png)
 
 ## What it is
 
