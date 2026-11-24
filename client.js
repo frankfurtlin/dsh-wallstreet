@@ -3,8 +3,8 @@
  *
  * 手写 ModuleLoader 工厂，不经打包：只依赖宿主已提供的 react，用 h() 直接构造
  * 元素。做两件事：
- *   1. 在侧栏「插件」组的 panellist 座位注册一行「华尔街之狼」（order 18，排在
- *      酒馆(12) / 知识库(14) / 紫微斗数(16) 之后）。
+ *   1. 在侧栏「插件」组的 panellist 座位注册一行「华尔街之狼」（order 5，排在
+ *      知识库(3) 之后，创作台(6) / Automation tasks(10) 之前）。
  *   2. 在 main 座位注册 keyed 面板页：直接渲染市场概览仪表盘（不走 iframe），
  *      数据来自宿主同源 API `/wallstreet/api/*`，因此自动继承 DSH 登录态。
  *
@@ -24,8 +24,8 @@ window.__ModuleLoader__.load({
 
     /** 侧栏行 id —— 同时是 main 座位的 key 与图标上的 data 锚点。 */
     var PANEL_ID = "wallstreet";
-    /** 侧栏顺序：Automation tasks = 10，酒馆 = 12，知识库 = 14，紫微斗数 = 16，华尔街之狼 = 18。 */
-    var PANEL_ORDER = 18;
+    /** 侧栏顺序：插件 = 0，知识库 = 3，华尔街之狼 = 5，创作台 = 6，Automation tasks = 10，酒馆 = 12，紫微斗数 = 14。 */
+    var PANEL_ORDER = 5;
     /** 宿主数据 API：同源，浏览器自动带 DSH 会话。 */
     var API = "/wallstreet/api";
     /** 轮询间隔：盘中 30s；数据在宿主侧已有 15–60s 缓存，不会打爆上游。 */
