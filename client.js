@@ -5271,7 +5271,7 @@ window.__ModuleLoader__.load({
         h(
           "div",
           { style: { fontSize: 11.5, color: COLORS.faint, lineHeight: 1.7 } },
-          "口径来自 openclaw:/root/vectra 的《个人投资策略方案》与《10 万本金版》，已抽成纯函数 lib/strategy.js。面板只做测算与展示，不接券商、不下单，不构成投资建议。",
+          "口径来自 openclaw:~/vectra 的《个人投资策略方案》与《10 万本金版》，已抽成纯函数 lib/strategy.js。面板只做测算与展示，不接券商、不下单，不构成投资建议。",
         ),
       );
     }
