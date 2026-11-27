@@ -37,13 +37,14 @@
     "README.md"
   ],
   "scripts": {
-    "check": "node --check lib/index.js && node --check lib/market.js && node --check lib/strategy.js && node --check lib/search.js && node --check lib/hub/schema.js && node --check lib/hub/store.js && node --check lib/hub/tagging.js && node --check lib/hub/ingest.js && node --check lib/hub/index.js && node --check lib/hub/sources.js && node --check lib/hub/upstream.js && node --check lib/hub/cache.js && node --check lib/hub/membership.js && node --check lib/hub/summarize.js && node --check lib/hub/config.js && node --check lib/hub/parts.js && node --check lib/hub/frontpage.js && node --check lib/hub/digest.js && node --check client.js",
+    "check": "node --check lib/index.js && node --check lib/market.js && node --check lib/strategy.js && node --check lib/search.js && node --check lib/hub/schema.js && node --check lib/hub/store.js && node --check lib/hub/tagging.js && node --check lib/hub/ingest.js && node --check lib/hub/index.js && node --check lib/hub/sources.js && node --check lib/hub/upstream.js && node --check lib/hub/cache.js && node --check lib/hub/membership.js && node --check lib/hub/summarize.js && node --check lib/hub/config.js && node --check lib/hub/parts.js && node --check lib/hub/frontpage.js && node --check lib/hub/digest.js && node --check lib/hub/llm.js && node --check lib/ask.js && node --check client.js",
     "test": "node --test \"test/**/*.test.mjs\"",
     "verify:api": "node verification/verify-api.mjs",
     "verify:quant-api": "node verification/verify-quant-api.mjs",
     "verify:strategy": "node verification/verify-strategy.mjs",
     "verify:quant-ui": "node verification/verify-quant-ui.mjs",
     "verify:hub": "node verification/verify-hub.mjs",
-    "verify:sources": "node verification/verify-sources.mjs"
+    "verify:sources": "node verification/verify-sources.mjs",
+    "verify:ask": "node verification/verify-ask.mjs"
   }
 }
