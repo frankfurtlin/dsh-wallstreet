@@ -274,6 +274,348 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /* ------------------------------ 盘面 AI 问答 ------------------------------ */
+
+    var ASK_SUGGESTIONS = ["今天为什么涨？", "明天会怎么走？", "哪些板块最强，能追吗？"];
+
+    /** 模型偶尔还是带 Markdown 标记：去掉粗体与标题符号，保留换行与编号。 */
+    function askPlainText(value) {
+      return String(value || "")
+        .replace(/\*\*/g, "")
+        .replace(/^#{1,6}\s*/gm, "");
+    }
+
+    /** 一条对话气泡：用户右侧淡底，AI 左侧描边。AI 输出保留换行。 */
+    function AskMessage(props) {
+      var message = props.message;
+      var isUser = message.role === "user";
+      return h(
+        "div",
+        {
+          "data-ask-message": message.role,
+          style: {
+            display: "flex",
+            flexDirection: "column",
+            alignItems: isUser ? "flex-end" : "flex-start",
+            gap: 3,
+          },
+        },
+        h("div", { style: { fontSize: 11, color: COLORS.faint } }, isUser ? "你" : "AI"),
+        h(
+          "div",
+          {
+            style: {
+              maxWidth: "94%",
+              padding: "8px 11px",
+              borderRadius: 10,
+              background: isUser ? "color-mix(in srgb, currentColor 8%, transparent)" : "transparent",
+              border: isUser ? "1px solid transparent" : "1px solid " + COLORS.border,
+              fontSize: 12.8,
+              lineHeight: 1.75,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            },
+          },
+          message.pending && !message.content ? "思考中…" : askPlainText(message.content),
+        ),
+      );
+    }
+
+    /**
+     * 盘面页 AI 问答：宿主按同一份 overview 生成上下文（不信任前端数据），
+     * 这里只负责对话历史和 SSE 流式渲染。
+     */
+    function MarketAsk(props) {
+      var data = props.data;
+      var state = react.useState({ messages: [], input: "", loading: false, error: "", model: "", dataAt: "" });
+      var s = state[0];
+      var setState = state[1];
+      var aliveRef = react.useRef(true);
+      var abortRef = react.useRef(null);
+
+      react.useEffect(function () {
+        aliveRef.current = true;
+        return function () {
+          aliveRef.current = false;
+          if (abortRef.current) abortRef.current.abort();
+        };
+      }, []);
+
+      var patch = function (fn) {
+        if (!aliveRef.current) return;
+        setState(fn);
+      };
+
+      var updateLast = function (fn) {
+        patch(function (prev) {
+          var messages = prev.messages.slice();
+          var last = messages[messages.length - 1];
+          if (last && last.role === "assistant" && last.pending) messages[messages.length - 1] = fn(last);
+          return Object.assign({}, prev, { messages: messages });
+        });
+      };
+
+      var finishWithError = function (message) {
+        patch(function (prev) {
+          var messages = prev.messages.slice();
+          var last = messages[messages.length - 1];
+          if (last && last.role === "assistant" && last.pending) {
+            if (last.content) messages[messages.length - 1] = { role: "assistant", content: last.content, pending: false };
+            else messages.pop();
+          }
+          return Object.assign({}, prev, { messages: messages, loading: false, error: message });
+        });
+      };
+
+      var runAsk = function (question) {
+        var text = String(question || "").trim();
+        if (!text || s.loading || !data) return;
+        var history = s.messages
+          .filter(function (m) {
+            return m.content;
+          })
+          .slice(-6)
+          .map(function (m) {
+            return { role: m.role, content: m.content };
+          });
+        patch(function (prev) {
+          return Object.assign({}, prev, {
+            messages: prev.messages.concat([
+              { role: "user", content: text },
+              { role: "assistant", content: "", pending: true },
+            ]),
+            input: "",
+            loading: true,
+            error: "",
+          });
+        });
+
+        var controller = new AbortController();
+        abortRef.current = controller;
+        // 后端看门狗 75s 会发 error；这里再加 85s 前端兜底，防止连接被中间层吞掉。
+        var guard = setTimeout(function () {
+          controller.abort();
+          finishWithError("模型响应超时，请重试");
+        }, 85000);
+
+        fetch(API + "/ask", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "text/event-stream" },
+          credentials: "same-origin",
+          body: JSON.stringify({ question: text, history: history }),
+          signal: controller.signal,
+        })
+          .then(function (response) {
+            if (response.ok) return response;
+            return response
+              .json()
+              .catch(function () {
+                return {};
+              })
+              .then(function (body) {
+                throw new Error((body && body.error) || "HTTP " + response.status);
+              });
+          })
+          .then(function (response) {
+            if (!response.body || typeof response.body.getReader !== "function") {
+              throw new Error("当前浏览器不支持流式读取");
+            }
+            var reader = response.body.getReader();
+            var decoder = new TextDecoder();
+            var buffer = "";
+            var handleFrame = function (frame) {
+              var line = String(frame || "").trim();
+              if (!line || line.indexOf("data:") !== 0) return;
+              var payload = null;
+              try {
+                payload = JSON.parse(line.slice(5).trim());
+              } catch (error) {
+                return;
+              }
+              if (!payload || typeof payload !== "object") return;
+              if (payload.type === "delta" && typeof payload.text === "string" && payload.text) {
+                updateLast(function (last) {
+                  return { role: "assistant", content: last.content + payload.text, pending: true };
+                });
+              } else if (payload.type === "done") {
+                updateLast(function (last) {
+                  return { role: "assistant", content: payload.answer || last.content, pending: false };
+                });
+                patch(function (prev) {
+                  return Object.assign({}, prev, {
+                    loading: false,
+                    model: payload.model || prev.model,
+                    dataAt: payload.dataAt || prev.dataAt,
+                  });
+                });
+              } else if (payload.type === "error") {
+                finishWithError(payload.message || "问答失败");
+              }
+            };
+            var pump = function () {
+              return reader.read().then(function (result) {
+                if (result.done) {
+                  if (buffer.trim()) handleFrame(buffer);
+                  return;
+                }
+                buffer += decoder.decode(result.value, { stream: true });
+                var frames = buffer.split("\n\n");
+                buffer = frames.pop() || "";
+                for (var index = 0; index < frames.length; index += 1) handleFrame(frames[index]);
+                return pump();
+              });
+            };
+            return pump();
+          })
+          .then(function () {
+            clearTimeout(guard);
+            patch(function (prev) {
+              return Object.assign({}, prev, { loading: false });
+            });
+          })
+          .catch(function (error) {
+            clearTimeout(guard);
+            if (error && error.name === "AbortError") return;
+            finishWithError((error && error.message) || "问答失败");
+          });
+      };
+
+      var dataAt = s.dataAt || (data && (data.dataTime || data.marketDate)) || "";
+      var chipStyle = {
+        padding: "3px 10px",
+        borderRadius: 999,
+        fontSize: 11.5,
+        cursor: "pointer",
+        border: "1px solid " + COLORS.border,
+        background: "transparent",
+        color: "inherit",
+        font: "inherit",
+      };
+
+      return h(
+        SectionCard,
+        {
+          id: "ask",
+          title: "AI 盘面问答",
+          hint: "带着这一页的数据问模型",
+          extra: h(
+            "div",
+            { style: { display: "flex", gap: 6, alignItems: "center" } },
+            data && data.dataMode === "live" ? h(Tag, null, "盘中实时") : h(Tag, null, "收盘快照"),
+            dataAt ? h(Tag, null, "数据 " + dataAt) : null,
+            s.model ? h(Tag, null, s.model) : null,
+            s.messages.length
+              ? h(
+                  ToolbarButton,
+                  {
+                    action: "ask-clear",
+                    onClick: function () {
+                      patch(function (prev) {
+                        return Object.assign({}, prev, { messages: [], error: "", model: "", dataAt: "" });
+                      });
+                    },
+                  },
+                  "新对话",
+                )
+              : null,
+          ),
+        },
+        s.messages.length === 0
+          ? h(
+              "div",
+              { style: { display: "flex", flexDirection: "column", gap: 8 } },
+              h(
+                "div",
+                { style: { fontSize: 12.5, color: COLORS.muted, lineHeight: 1.7 } },
+                "发送时会自动带上这一页的指数、涨跌家数、涨停数、成交额、板块强弱、市场温度与上证均线位置。",
+              ),
+              h(
+                "div",
+                { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+                ASK_SUGGESTIONS.map(function (question) {
+                  return h(
+                    "button",
+                    {
+                      key: question,
+                      type: "button",
+                      "data-ask-suggestion": question,
+                      onClick: function () {
+                        runAsk(question);
+                      },
+                      style: chipStyle,
+                    },
+                    question,
+                  );
+                }),
+              ),
+            )
+          : h(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  maxHeight: 400,
+                  overflowY: "auto",
+                  paddingRight: 4,
+                },
+              },
+              s.messages.map(function (message, index) {
+                return h(AskMessage, { key: index, message: message });
+              }),
+            ),
+        h(
+          "div",
+          { style: { display: "flex", gap: 8, marginTop: 10 } },
+          h("input", {
+            type: "text",
+            value: s.input,
+            "data-ask-input": "",
+            placeholder: s.loading ? "正在分析这一页的数据…" : "问这一页：为什么涨 / 明天怎么走 / 哪个板块最强",
+            disabled: !data,
+            onChange: function (event) {
+              var value = event.target.value;
+              patch(function (prev) {
+                return Object.assign({}, prev, { input: value });
+              });
+            },
+            onKeyDown: function (event) {
+              if (event.key === "Enter") runAsk(s.input);
+            },
+            style: {
+              flex: 1,
+              minWidth: 0,
+              padding: "7px 10px",
+              borderRadius: 8,
+              border: "1px solid " + COLORS.border,
+              background: "transparent",
+              color: "inherit",
+              fontSize: 13,
+            },
+          }),
+          h(
+            ToolbarButton,
+            {
+              action: "ask-send",
+              primary: true,
+              disabled: s.loading || !s.input.trim() || !data,
+              onClick: function () {
+                runAsk(s.input);
+              },
+            },
+            s.loading ? "分析中…" : "提问",
+          ),
+        ),
+        s.error ? h("div", { style: { fontSize: 12.5, color: COLORS.down, marginTop: 8 } }, s.error) : null,
+        h(
+          "div",
+          { style: { fontSize: 11, color: COLORS.faint, marginTop: 6 } },
+          "AI 基于本页数据生成解读，不构成投资建议。",
+        ),
+      );
+    }
+
     /* ------------------------------ 图表 ------------------------------ */
 
     /** 迷你走势线：只画价格轨迹，不加坐标轴。 */
@@ -5138,6 +5480,7 @@ window.__ModuleLoader__.load({
                 stale: data.stale,
                 live: data.dataMode === "live",
               }));
+          sections.push(h(MarketAsk, { key: "ask", data: data }));
           sections.push(
             h(
               SectionCard,
