@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url'
 
 // playwright 解析顺序：环境变量 > 同目录的 hermes-site 副本 > 全局安装
 const require = createRequire(
-  process.env.PLAYWRIGHT_MODULE_DIR || new URL('../../hermes-site/tools/node_modules/', import.meta.url)
+  process.env.PLAYWRIGHT_MODULE_DIR || new URL('../../../hermes-site/tools/node_modules/', import.meta.url)
 )
 const { chromium } = require('playwright')
 

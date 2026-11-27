@@ -274,9 +274,24 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /* ------------------------------ 盘面 AI 问答 ------------------------------ */
+    /* ------------------------------ 右侧 AI 问答栏 ------------------------------ */
 
-    var ASK_SUGGESTIONS = ["今天为什么涨？", "明天会怎么走？", "哪些板块最强，能追吗？"];
+    var PAGE_LABELS = {
+      market: "盘面",
+      moves: "异动",
+      news: "资讯",
+      research: "研究",
+      strategy: "策略",
+    };
+
+    /** 每个 tab 的快捷问题：都贴着该页的数据，换了 tab 就换一组。 */
+    var ASK_SUGGESTIONS = {
+      market: ["今天为什么涨？", "明天会怎么走？", "哪个板块最强，能追吗？"],
+      moves: ["今天涨停结构怎么样？", "资金在往哪个方向切？", "连板梯队健康吗？"],
+      news: ["今天最重要的三条消息？", "有没有被忽略的利空？", "哪些板块有明确催化？"],
+      research: ["研究结论说了什么？", "现在估值什么位置？", "我的持仓集中吗？"],
+      strategy: ["这个配置比例合理吗？", "止损线该设在哪？", "网格怎么布比较好？"],
+    };
 
     /** 模型偶尔还是带 Markdown 标记：去掉粗体与标题符号，保留换行与编号。 */
     function askPlainText(value) {
@@ -325,13 +340,22 @@ window.__ModuleLoader__.load({
      * 盘面页 AI 问答：宿主按同一份 overview 生成上下文（不信任前端数据），
      * 这里只负责对话历史和 SSE 流式渲染。
      */
-    function MarketAsk(props) {
-      var data = props.data;
+    /**
+     * 右侧 AI 问答栏：五个 tab 共用，按当前页取上下文与快捷问题。
+     * 宽面板是常驻列；窄面板收成右下角悬浮按钮 + 覆盖式抽屉，不挤占内容。
+     */
+    function AskDock(props) {
+      var view = props.view;
+      var open = props.open;
+      var floating = props.floating;
+      var setOpen = props.setOpen;
+      var profile = props.profile || "10w";
       var state = react.useState({ messages: [], input: "", loading: false, error: "", model: "", dataAt: "" });
       var s = state[0];
       var setState = state[1];
       var aliveRef = react.useRef(true);
       var abortRef = react.useRef(null);
+      var listRef = react.useRef(null);
 
       react.useEffect(function () {
         aliveRef.current = true;
@@ -340,6 +364,12 @@ window.__ModuleLoader__.load({
           if (abortRef.current) abortRef.current.abort();
         };
       }, []);
+
+      // 流式输出时自动滚到底部，否则新内容停在可视区外面。
+      react.useEffect(function () {
+        var node = listRef.current;
+        if (node) node.scrollTop = node.scrollHeight;
+      }, [s.messages]);
 
       var patch = function (fn) {
         if (!aliveRef.current) return;
@@ -368,8 +398,8 @@ window.__ModuleLoader__.load({
       };
 
       var runAsk = function (question) {
-        var text = String(question || "").trim();
-        if (!text || s.loading || !data) return;
+        var value = String(question || "").trim();
+        if (!value || s.loading) return;
         var history = s.messages
           .filter(function (m) {
             return m.content;
@@ -381,8 +411,8 @@ window.__ModuleLoader__.load({
         patch(function (prev) {
           return Object.assign({}, prev, {
             messages: prev.messages.concat([
-              { role: "user", content: text },
-              { role: "assistant", content: "", pending: true },
+              { role: "user", content: value, page: view },
+              { role: "assistant", content: "", pending: true, page: view },
             ]),
             input: "",
             loading: true,
@@ -402,7 +432,7 @@ window.__ModuleLoader__.load({
           method: "POST",
           headers: { "content-type": "application/json", accept: "text/event-stream" },
           credentials: "same-origin",
-          body: JSON.stringify({ question: text, history: history }),
+          body: JSON.stringify({ question: value, history: history, page: view, profile: profile }),
           signal: controller.signal,
         })
           .then(function (response) {
@@ -435,11 +465,11 @@ window.__ModuleLoader__.load({
               if (!payload || typeof payload !== "object") return;
               if (payload.type === "delta" && typeof payload.text === "string" && payload.text) {
                 updateLast(function (last) {
-                  return { role: "assistant", content: last.content + payload.text, pending: true };
+                  return { role: "assistant", content: last.content + payload.text, pending: true, page: last.page };
                 });
               } else if (payload.type === "done") {
                 updateLast(function (last) {
-                  return { role: "assistant", content: payload.answer || last.content, pending: false };
+                  return { role: "assistant", content: payload.answer || last.content, pending: false, page: last.page };
                 });
                 patch(function (prev) {
                   return Object.assign({}, prev, {
@@ -480,9 +510,10 @@ window.__ModuleLoader__.load({
           });
       };
 
-      var dataAt = s.dataAt || (data && (data.dataTime || data.marketDate)) || "";
+      var suggestions = ASK_SUGGESTIONS[view] || ASK_SUGGESTIONS.market;
+      var dataAt = s.dataAt;
       var chipStyle = {
-        padding: "3px 10px",
+        padding: "3px 9px",
         borderRadius: 999,
         fontSize: 11.5,
         cursor: "pointer",
@@ -490,129 +521,283 @@ window.__ModuleLoader__.load({
         background: "transparent",
         color: "inherit",
         font: "inherit",
+        whiteSpace: "nowrap",
       };
 
-      return h(
-        SectionCard,
+      var header = h(
+        "div",
         {
-          id: "ask",
-          title: "AI 盘面问答",
-          hint: "带着这一页的数据问模型",
-          extra: h(
-            "div",
-            { style: { display: "flex", gap: 6, alignItems: "center" } },
-            data && data.dataMode === "live" ? h(Tag, null, "盘中实时") : h(Tag, null, "收盘快照"),
-            dataAt ? h(Tag, null, "数据 " + dataAt) : null,
-            s.model ? h(Tag, null, s.model) : null,
-            s.messages.length
-              ? h(
-                  ToolbarButton,
-                  {
-                    action: "ask-clear",
-                    onClick: function () {
-                      patch(function (prev) {
-                        return Object.assign({}, prev, { messages: [], error: "", model: "", dataAt: "" });
-                      });
-                    },
-                  },
-                  "新对话",
-                )
-              : null,
-          ),
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 12px",
+            borderBottom: "1px solid " + COLORS.border,
+            flexShrink: 0,
+          },
         },
+        h(
+          "span",
+          { style: { fontSize: 12.5, fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" } },
+          "AI 问答",
+        ),
+        h(Tag, null, PAGE_LABELS[view] + "页"),
+        dataAt
+          ? h("span", { style: { fontSize: 11, color: COLORS.faint, flexShrink: 0, whiteSpace: "nowrap" } }, dataAt)
+          : null,
+        h("span", { style: { flex: 1, minWidth: 0 } }),
+        s.messages.length
+          ? h(
+              "button",
+              {
+                type: "button",
+                "data-dsh-wallstreet-action": "ask-clear",
+                title: "清空对话",
+                onClick: function () {
+                  patch(function (prev) {
+                    return Object.assign({}, prev, { messages: [], error: "", dataAt: "" });
+                  });
+                },
+                style: {
+                  border: "none",
+                  background: "transparent",
+                  color: COLORS.muted,
+                  font: "inherit",
+                  fontSize: 11.5,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  whiteSpace: "nowrap",
+                },
+              },
+              "新对话",
+            )
+          : null,
+        h(
+          "button",
+          {
+            type: "button",
+            "data-dsh-wallstreet-action": "ask-close",
+            title: "收起问答栏",
+            onClick: function () {
+              setOpen(false);
+            },
+            style: {
+              border: "none",
+              background: "transparent",
+              color: COLORS.muted,
+              font: "inherit",
+              fontSize: 15,
+              lineHeight: 1,
+              cursor: "pointer",
+              padding: "0 2px",
+              flexShrink: 0,
+            },
+          },
+          "×",
+        ),
+      );
+
+      var list =
         s.messages.length === 0
           ? h(
               "div",
-              { style: { display: "flex", flexDirection: "column", gap: 8 } },
-              h(
-                "div",
-                { style: { fontSize: 12.5, color: COLORS.muted, lineHeight: 1.7 } },
-                "发送时会自动带上这一页的指数、涨跌家数、涨停数、成交额、板块强弱、市场温度与上证均线位置。",
-              ),
-              h(
-                "div",
-                { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
-                ASK_SUGGESTIONS.map(function (question) {
-                  return h(
-                    "button",
-                    {
-                      key: question,
-                      type: "button",
-                      "data-ask-suggestion": question,
-                      onClick: function () {
-                        runAsk(question);
-                      },
-                      style: chipStyle,
-                    },
-                    question,
-                  );
-                }),
-              ),
+              { style: { fontSize: 12.5, color: COLORS.muted, lineHeight: 1.75 } },
+              "问这一页的事：当前页的数据（" + PAGE_LABELS[view] + "页）会随问题一起交给模型。",
             )
-          : h(
-              "div",
-              {
-                style: {
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                  maxHeight: 400,
-                  overflowY: "auto",
-                  paddingRight: 4,
-                },
-              },
-              s.messages.map(function (message, index) {
-                return h(AskMessage, { key: index, message: message });
-              }),
-            ),
+          : s.messages.map(function (message, index) {
+              return h(AskMessage, { key: index, message: message });
+            });
+
+      var content = h(
+        "div",
+        { style: { display: "flex", flexDirection: "column", minHeight: 0, flex: 1, minWidth: 0 } },
+        header,
         h(
           "div",
-          { style: { display: "flex", gap: 8, marginTop: 10 } },
-          h("input", {
-            type: "text",
-            value: s.input,
-            "data-ask-input": "",
-            placeholder: s.loading ? "正在分析这一页的数据…" : "问这一页：为什么涨 / 明天怎么走 / 哪个板块最强",
-            disabled: !data,
-            onChange: function (event) {
-              var value = event.target.value;
-              patch(function (prev) {
-                return Object.assign({}, prev, { input: value });
-              });
-            },
-            onKeyDown: function (event) {
-              if (event.key === "Enter") runAsk(s.input);
-            },
+          {
+            ref: listRef,
+            "data-ask-messages": "",
             style: {
               flex: 1,
-              minWidth: 0,
-              padding: "7px 10px",
-              borderRadius: 8,
-              border: "1px solid " + COLORS.border,
-              background: "transparent",
-              color: "inherit",
-              fontSize: 13,
+              minHeight: 0,
+              overflowY: "auto",
+              padding: "10px 12px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
             },
-          }),
-          h(
-            ToolbarButton,
-            {
-              action: "ask-send",
-              primary: true,
-              disabled: s.loading || !s.input.trim() || !data,
-              onClick: function () {
-                runAsk(s.input);
-              },
-            },
-            s.loading ? "分析中…" : "提问",
-          ),
+          },
+          list,
         ),
-        s.error ? h("div", { style: { fontSize: 12.5, color: COLORS.down, marginTop: 8 } }, s.error) : null,
         h(
           "div",
-          { style: { fontSize: 11, color: COLORS.faint, marginTop: 6 } },
-          "AI 基于本页数据生成解读，不构成投资建议。",
+          { style: { padding: "10px 12px 12px", borderTop: "1px solid " + COLORS.border, flexShrink: 0 } },
+          h(
+            "div",
+            { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 } },
+            suggestions.map(function (question) {
+              return h(
+                "button",
+                {
+                  key: question,
+                  type: "button",
+                  "data-ask-suggestion": question,
+                  onClick: function () {
+                    runAsk(question);
+                  },
+                  style: chipStyle,
+                },
+                question,
+              );
+            }),
+          ),
+          h(
+            "div",
+            { style: { display: "flex", gap: 6 } },
+            h("input", {
+              type: "text",
+              value: s.input,
+              "data-ask-input": "",
+              placeholder: s.loading ? "分析中…" : "问这一页…",
+              onChange: function (event) {
+                var value = event.target.value;
+                patch(function (prev) {
+                  return Object.assign({}, prev, { input: value });
+                });
+              },
+              onKeyDown: function (event) {
+                if (event.key === "Enter") runAsk(s.input);
+              },
+              style: {
+                flex: 1,
+                minWidth: 0,
+                padding: "6px 9px",
+                borderRadius: 8,
+                border: "1px solid " + COLORS.border,
+                background: "transparent",
+                color: "inherit",
+                fontSize: 12.5,
+              },
+            }),
+            h(
+              ToolbarButton,
+              {
+                action: "ask-send",
+                primary: true,
+                disabled: s.loading || !s.input.trim(),
+                onClick: function () {
+                  runAsk(s.input);
+                },
+              },
+              s.loading ? "分析中…" : "提问",
+            ),
+          ),
+          s.error ? h("div", { style: { fontSize: 12, color: COLORS.down, marginTop: 6 } }, s.error) : null,
+          h(
+            "div",
+            { style: { fontSize: 10.5, color: COLORS.faint, marginTop: 6 } },
+            (s.model ? s.model + " · " : "") + "基于当前页面数据生成，不构成投资建议。",
+          ),
         ),
+      );
+
+      if (floating) {
+        if (!open) {
+          return h(
+            "button",
+            {
+              type: "button",
+              "data-ask-toggle": "",
+              title: "打开 AI 问答",
+              onClick: function () {
+                setOpen(true);
+              },
+              style: {
+                position: "absolute",
+                right: 16,
+                bottom: 16,
+                zIndex: 40,
+                width: 52,
+                height: 52,
+                borderRadius: 26,
+                border: "1px solid " + COLORS.borderStrong,
+                background: "Canvas",
+                color: "CanvasText",
+                boxShadow: "0 6px 20px rgba(0, 0, 0, 0.18)",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 700,
+              },
+            },
+            "AI",
+          );
+        }
+        return h(
+          "div",
+          {
+            "data-ask-dock": "floating",
+            style: {
+              position: "absolute",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 40,
+              width: "min(380px, 92%)",
+              background: "Canvas",
+              color: "CanvasText",
+              borderLeft: "1px solid " + COLORS.borderStrong,
+              boxShadow: "-14px 0 34px rgba(0, 0, 0, 0.2)",
+              display: "flex",
+              flexDirection: "column",
+              minHeight: 0,
+            },
+          },
+          content,
+        );
+      }
+
+      if (!open) {
+        return h(
+          "button",
+          {
+            type: "button",
+            "data-ask-toggle": "",
+            title: "展开 AI 问答",
+            onClick: function () {
+              setOpen(true);
+            },
+            style: {
+              width: 42,
+              flexShrink: 0,
+              border: "none",
+              borderLeft: "1px solid " + COLORS.border,
+              background: "transparent",
+              color: COLORS.muted,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            },
+          },
+          h("span", { style: { writingMode: "vertical-rl", fontSize: 12.5, letterSpacing: 2 } }, "AI 问答"),
+        );
+      }
+
+      return h(
+        "div",
+        {
+          "data-ask-dock": "docked",
+          style: {
+            width: props.width || 340,
+            flexShrink: 0,
+            borderLeft: "1px solid " + COLORS.border,
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+            minWidth: 0,
+          },
+        },
+        content,
       );
     }
 
@@ -5287,6 +5472,9 @@ window.__ModuleLoader__.load({
       var shellCompact = useMediaQuery("(max-width: 959px)");
       var narrow = panelWidth > 0 && panelWidth < 860;
       var tight = panelWidth > 0 && panelWidth < 580;
+      /** 内容区实际可用宽度：右侧问答栏常驻时要扣掉它，再决定卡片是否单列。 */
+      var askDockWidth = 340;
+      var contentNarrow = panelWidth > 0 && panelWidth - (narrow ? 0 : askDockWidth) <= 820;
       var emptyMeta = { loading: false, fetchedAt: "", dataDate: "" };
       var movesMetaState = react.useState(emptyMeta);
       var movesMeta = movesMetaState[0];
@@ -5304,6 +5492,12 @@ window.__ModuleLoader__.load({
       var strategyMetaState = react.useState(emptyMeta);
       var strategyMeta = strategyMetaState[0];
       var setStrategyMeta = strategyMetaState[1];
+      // 右侧 AI 问答栏：宽面板常驻（默认展开）；窄面板收成悬浮按钮（默认收起）。
+      // 两个状态分开存，窄屏不会把宽屏的「展开」意图改掉，切回宽屏仍保持常驻。
+      var askWideState = react.useState(true);
+      var askFloatState = react.useState(false);
+      var askOpen = narrow ? askFloatState[0] : askWideState[0];
+      var setAskOpen = narrow ? askFloatState[1] : askWideState[1];
       var stockState = react.useState(null);
       var selectedStock = stockState[0];
       var setSelectedStock = stockState[1];
@@ -5480,7 +5674,6 @@ window.__ModuleLoader__.load({
                 stale: data.stale,
                 live: data.dataMode === "live",
               }));
-          sections.push(h(MarketAsk, { key: "ask", data: data }));
           sections.push(
             h(
               SectionCard,
@@ -5509,7 +5702,7 @@ window.__ModuleLoader__.load({
                 key: "charts",
                 style: {
                   display: "grid",
-                  gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "minmax(0, 1.55fr) minmax(260px, 1fr)",
+                  gridTemplateColumns: contentNarrow ? "minmax(0, 1fr)" : "minmax(0, 1.55fr) minmax(260px, 1fr)",
                   gap: 12,
                 },
               },
@@ -5534,7 +5727,7 @@ window.__ModuleLoader__.load({
               "div",
               {
                 key: "breadth-sectors",
-                style: { display: "grid", gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1.5fr)", gap: 12 },
+                style: { display: "grid", gridTemplateColumns: contentNarrow ? "minmax(0, 1fr)" : "minmax(0, 1fr) minmax(0, 1.5fr)", gap: 12 },
               },
               h(
                 SectionCard,
@@ -5662,10 +5855,26 @@ window.__ModuleLoader__.load({
           "data-dsh-wallstreet-panel": "",
           "data-dsh-wallstreet-view": view,
           ref: rootRef,
-          style: { display: "flex", flexDirection: "column", height: "100%", minHeight: 0 },
+          style: { position: "relative", display: "flex", flexDirection: "column", height: "100%", minHeight: 0 },
         },
         toolbar,
-        body,
+        h(
+          "div",
+          { style: { flex: 1, minHeight: 0, minWidth: 0, display: "flex" } },
+          h(
+            "div",
+            { style: { flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" } },
+            body,
+          ),
+          h(AskDock, {
+            view: view,
+            open: askOpen,
+            setOpen: setAskOpen,
+            floating: narrow,
+            width: askDockWidth,
+            profile: strategyMeta && strategyMeta.dataDate === "50w" ? "50w" : "10w",
+          }),
+        ),
         selectedStock
           ? h(StockModal, {
               code: selectedStock,

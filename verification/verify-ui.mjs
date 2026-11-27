@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 
 // playwright 解析顺序：环境变量 > 同目录的 hermes-site 副本 > 全局安装
 const require = createRequire(
-  process.env.PLAYWRIGHT_MODULE_DIR || new URL('../../hermes-site/tools/node_modules/', import.meta.url)
+  process.env.PLAYWRIGHT_MODULE_DIR || new URL('../../../hermes-site/tools/node_modules/', import.meta.url)
 )
 const { chromium } = require('playwright')
 
@@ -78,12 +78,13 @@ try {
         id: button.querySelector('[data-dsh-panel-entry]')?.getAttribute('data-dsh-panel-entry') || null,
       })),
   )
+  // 顺序由各插件注册的 order 决定：知识库 3 → 华尔街之狼 5 → 酒馆 12 → 紫微斗数 14。
   const customOrder = rows
     .map((row) => row.id)
     .filter((id) => id && ['tavern', 'kb', 'ziwei', 'wallstreet'].includes(id))
   check(
-    '自研插件顺序：酒馆 → 知识库 → 紫微斗数 → 华尔街之狼',
-    JSON.stringify(customOrder) === JSON.stringify(['tavern', 'kb', 'ziwei', 'wallstreet']),
+    '自研插件顺序：知识库 → 华尔街之狼 → 酒馆 → 紫微斗数',
+    JSON.stringify(customOrder) === JSON.stringify(['kb', 'wallstreet', 'tavern', 'ziwei']),
     JSON.stringify(customOrder),
   )
   const labels = rows.map((row) => row.label).filter(Boolean)
@@ -287,6 +288,13 @@ try {
   check('研究 · 持仓集中度区块渲染', /持仓集中度/.test(researchText))
   check('研究 · 不再包含「涨停池」（已移入异动）', !/涨停池/.test(researchText))
   check('研究 · 财经快讯与公告区块渲染', /财经快讯与公告/.test(researchText))
+  // 快讯区块自己异步拉 /news，数据源慢时渲染会晚于研究页骨架：先等最多 12s 再数链接。
+  await page
+    .waitForFunction(
+      () => document.querySelectorAll('[data-dsh-wallstreet-research] a[target="_blank"]').length >= 10,
+      { timeout: 12_000 },
+    )
+    .catch(() => {})
   const newsLinks = await page.$$eval('[data-dsh-wallstreet-research] a', (as) => as.filter((a) => /^https?:\/\//.test(a.href) && a.target === '_blank').map((a) => a.href))
   check('研究 · 快讯可点击跳原文（>=10 条）', newsLinks.length >= 10, `${newsLinks.length} 条`)
   check('研究 · 快讯来源多样', /新浪|华尔街见闻|巨潮/.test(researchText))

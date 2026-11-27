@@ -7,7 +7,18 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildMarketContext, normalizeAskInput, SYSTEM_PROMPT, MAX_QUESTION } from '../lib/ask.js'
+import {
+  ASK_PAGES,
+  MAX_QUESTION,
+  PAGE_LABELS,
+  SYSTEM_PROMPT,
+  buildMarketContext,
+  buildMovesContext,
+  buildNewsContext,
+  buildResearchContext,
+  buildStrategyContext,
+  normalizeAskInput,
+} from '../lib/ask.js'
 
 function sampleOverview() {
   return {
@@ -103,4 +114,130 @@ test('normalizeAskInput：历史最多 8 条、单条截断、去掉开头 assis
 test('SYSTEM_PROMPT：约束了「不编数据」和「不构成投资建议」', () => {
   assert.match(SYSTEM_PROMPT, /不要编/)
   assert.match(SYSTEM_PROMPT, /不构成投资建议/)
+})
+
+
+/* ------------------------------ 其余四个页面 ------------------------------ */
+
+test('buildMovesContext：涨停结构、连板、行业与资金、龙虎榜', () => {
+  const moves = {
+    dataMode: 'live',
+    marketDate: '2026-11-27',
+    dataTime: '14:10',
+    stale: true,
+    limitPool: {
+      today: 285,
+      prev: 51,
+      rows: [
+        { name: '常山北明', industry: 'IT服务Ⅱ', boardCount: 2 },
+        { name: '证通电子', industry: 'IT服务Ⅱ', boardCount: 3 },
+        { name: '镇洋发展', industry: '化学原料', boardCount: 1 },
+      ],
+    },
+    movers: { top: [{ name: '艾融软件', pct: 30 }], bottom: [{ name: '青岛食品', pct: -8.7 }] },
+    sectorFlow: {
+      top: [{ industry: '半导体', changePct: 12.7, net: 1.6e10 }],
+      bottom: [{ industry: '银行', changePct: -1.2, net: -2.1e9 }],
+    },
+    lhb: [{ name: '康芝药业', pct: 20, net: 3.3e7 }],
+    warnings: [],
+  }
+  const { text, dataAt } = buildMovesContext(moves)
+  assert.equal(dataAt, '2026-11-27 14:10')
+  assert.match(text, /当前页面：异动/)
+  assert.match(text, /涨停：今日 285 家（前一交易日 51 家）/)
+  assert.match(text, /2 板 1 家、3 板 1 家/)
+  assert.match(text, /IT服务Ⅱ 2 家/)
+  assert.match(text, /半导体 \+12\.70%/)
+  assert.match(text, /龙虎榜：康芝药业/)
+})
+
+test('buildMovesContext：空数据给出人话而不是崩溃', () => {
+  const { text } = buildMovesContext(null)
+  assert.match(text, /异动数据暂不可用/)
+})
+
+test('buildNewsContext：按时间/类型/重要度列出事件，并保留条数', () => {
+  const feed = {
+    total: 42,
+    events: [
+      { ts: new Date('2026-11-27T05:24:00Z').getTime(), title: '国常会一个月内两提资本市场', eventType: '政策法规', importance: 70, tickers: ['600030'] },
+      { ts: new Date('2026-11-27T05:12:00Z').getTime(), title: '算力芯片概念再度拉升', kind: 'flash', importance: 62 },
+    ],
+  }
+  const { text } = buildNewsContext(feed)
+  assert.match(text, /最近 24 小时重要度 ≥60 的事件 · 按重要度取前 2 条（共 42 条）/)
+  assert.match(text, /重要度 70｜国常会一个月内两提资本市场（600030）/)
+  assert.match(text, /重要度 62｜算力芯片概念再度拉升/)
+})
+
+test('buildResearchContext：宽度、估值、结论、持仓集中度都在', () => {
+  const overview = {
+    dataDate: '2026-11-26',
+    breadth: { up: 1766, down: 3641, limitUp: 88, limitDown: 21 },
+    valuation: [{ name: '沪深300', peTtm: 12.3, pctile: 45 }],
+    margin: { sh: { date: '2026-11-26', financingBalance: 1.2e12 } },
+    limitPool: { today: 66, prev: 54 },
+    warnings: [],
+    stale: false,
+  }
+  const research = {
+    headline: '量化策略样本外普遍无效。',
+    headlineDetail: '唯一稳健结论是高换手后续跑输。',
+    premises: ['前提一', '前提二'],
+    counts: { total: 23, effective: 0, edge: 2, invalid: 21 },
+    strategies: [{ displayName: '低波动红利', alpha: 0.03, actT: 2.1 }],
+    warnings: [],
+  }
+  const holdings = {
+    snapshot: { date: '2026-09-11', holdingsCount: 11, portfolioPct: 0.62, hhi: 0.11, groupWeight: { 资源: 0.4 }, alerts: ['资源组 40% 超限'] },
+    warnings: [],
+  }
+  const { text, dataAt } = buildResearchContext(overview, research, holdings)
+  assert.equal(dataAt, '2026-11-26')
+  assert.match(text, /市场宽度（2026-11-26）/)
+  assert.match(text, /沪深300 12.3（45%）/)
+  assert.match(text, /研究结论：量化策略样本外普遍无效。/)
+  assert.match(text, /策略样本：23 个（有效 0 \/ 边缘 2 \/ 无效 21）/)
+  assert.match(text, /持仓集中度（2026-09-11）/)
+  assert.match(text, /资源 40\.0%/)
+})
+
+test('buildStrategyContext：配置、目标年化与止损熔断阈值', () => {
+  const table = {
+    rows: [
+      { label: '现金储备', weightPct: 10, amount: 10000, role: '抄底子弹', targetReturn: 0.025 },
+      { label: '核心 ETF 底仓', weightPct: 30, amount: 30000, role: '宽基底盘', targetReturn: 0.1 },
+    ],
+    blendedTarget: 14.8,
+  }
+  const profile = {
+    label: '10 万本金 · 目标年化 20%',
+    rules: {
+      singleStockMax: 0.08,
+      singleSectorMax: 0.2,
+      coreMin: 0.25,
+      cashMin: 0.05,
+      stopLoss: { stock: { review: -0.1, cut: -0.2 }, sectorETF: { review: -0.15, cut: -0.25 } },
+      circuitBreaker: { pause: -0.15, liquidateSatellite: -0.25 },
+    },
+  }
+  const { text } = buildStrategyContext(table, profile)
+  assert.match(text, /当前页面：策略/)
+  assert.match(text, /现金储备 10%（1 万/)
+  assert.match(text, /组合目标年化：14\.8%/)
+  assert.match(text, /单票上限 8%、单行业 20%/)
+  assert.match(text, /个股 -10% 复核 \/ -20% 砍/)
+  assert.match(text, /熔断：组合 -15% 暂停加仓、-25% 清卫星仓/)
+})
+
+test('normalizeAskInput：page 只认白名单，profile 只认 10w/50w', () => {
+  assert.deepEqual(
+    ASK_PAGES.map((page) => PAGE_LABELS[page]),
+    ['盘面', '异动', '资讯', '研究', '策略'],
+  )
+  assert.equal(normalizeAskInput({ question: '怎么看？', page: 'moves' }).page, 'moves')
+  assert.equal(normalizeAskInput({ question: '怎么看？', page: 'hack' }).page, 'market')
+  assert.equal(normalizeAskInput({ question: '怎么看？', profile: '50w' }).profileId, '50w')
+  assert.equal(normalizeAskInput({ question: '怎么看？', profile: '999w' }).profileId, '10w')
 })
