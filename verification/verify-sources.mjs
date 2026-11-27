@@ -10,7 +10,8 @@
  *   ② em-flash 离线契约测试：无 title 回退到 summary、http→https、req_trace 错误信封。
  */
 import { readFile } from 'node:fs/promises'
-import { SOURCES } from '/root/workspace/plugins/dsh-wallstreet/lib/hub/sources.js'
+import { fileURLToPath } from 'node:url'
+import { SOURCES } from '../lib/hub/sources.js'
 
 const argv = process.argv.slice(2)
 const onlyArg = argv.includes('--only') ? argv[argv.indexOf('--only') + 1] : ''
@@ -25,7 +26,7 @@ function structural(ok, message) {
 }
 
 /* ---- ① 结构自检：适配器必须统一走 upstream.js ---- */
-const sourcesPath = '/root/workspace/plugins/dsh-wallstreet/lib/hub/sources.js'
+const sourcesPath = fileURLToPath(new URL('../lib/hub/sources.js', import.meta.url))
 const sourcesText = await readFile(sourcesPath, 'utf8')
 console.log('结构自检：')
 structural(/from '\.\/upstream\.js'/.test(sourcesText), 'sources.js 从 ./upstream.js 取 fetchJson/fetchText/UpstreamError')

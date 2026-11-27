@@ -16,7 +16,10 @@ import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const require = createRequire('/root/workspace/hermes-site/tools/node_modules/')
+// playwright 解析顺序：环境变量 > 同目录的 hermes-site 副本 > 全局安装
+const require = createRequire(
+  process.env.PLAYWRIGHT_MODULE_DIR || new URL('../../hermes-site/tools/node_modules/', import.meta.url)
+)
 const { chromium } = require('playwright')
 
 const argv = process.argv.slice(2)

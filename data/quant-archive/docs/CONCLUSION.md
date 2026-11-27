@@ -121,7 +121,7 @@
 ```bash
 # 全量重跑 34 策略（每策略搜 45 变体）
 rm -f backtests/results/*.json
-/usr/bin/python3 /root/.hermes/scripts/quant_optimize_tick.py
+/usr/bin/python3 ~/.hermes/scripts/quant_optimize_tick.py
 
 # Alpha158 IC 扫描
 /usr/bin/python3 engine/ic_scan158.py
@@ -131,7 +131,7 @@ rm -f backtests/results/*.json
 /usr/bin/python3 engine/market_neutral_filter.py
 
 # 汇总交付清单
-/usr/bin/python3 /root/.hermes/scripts/quant_deliverable_summary.py
+/usr/bin/python3 ~/.hermes/scripts/quant_deliverable_summary.py
 ```
 
 ---

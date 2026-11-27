@@ -488,7 +488,7 @@ CJK 短标题 `稀土价格上涨`/`稀土价格上调` bigram 0.6→0.667；`�
 
 新增 `lib/hub/digest.js`：`renderDigestMarkdown`（纯函数）、`renderDigestHtml`（知识库收 HTML）、
 `generateDigest`（写 `data/digest/YYYY-MM-DD.md|.html` + `latest.*`，原子写）、`listDigests`、`publishDigest`
-（调 `/root/scripts/kb/kb_publish.py`）。
+（调 `~/scripts/kb/kb_publish.py`）。
 
 - 面板：「导出日报」「发到知识库」两个按钮，结果就地回显（实测发布成功 `doc/6b06df33a756504f`）。
 - 定时：每天 **23:30**（北京时间）自动生成。为什么不是收盘 15:35——A 股公告集中在 16:00–22:00，
