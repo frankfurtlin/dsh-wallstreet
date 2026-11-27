@@ -1,8 +1,8 @@
 {
   "name": "dsh-wallstreet",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "private": true,
-  "description": "「华尔街之狼」DSH 插件：投资研究面板一期（市场概览）—— A 股/港股/美股指数、市场宽度、成交额、板块轮动与市场温度分析，数据由宿主进程抓取并缓存，仅 DSH 登录用户可访问。",
+  "description": "「华尔街之狼」DSH 插件：投资研究面板（资讯集散中心 + 市场概览 + 量化研究 + 策略口径）—— 12 源资讯入站（13 个适配器）/聚簇/按脚本分词去重/打标/重要度/AI 摘要并落 SQLite，今日头版、每日 Markdown 日报、面板可配源开关与间隔、板块成分股映射联动盘面，盘面接口分区四态（stale 兜底），统一上游调用与三档缓存；数据由宿主进程抓取并缓存，仅 DSH 登录用户可访问。",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
@@ -33,12 +33,17 @@
     "client.js",
     "cordis.patch.yml",
     "verification",
+    "docs",
     "README.md"
   ],
   "scripts": {
-    "check": "node --check lib/index.js && node --check lib/market.js && node --check client.js",
+    "check": "node --check lib/index.js && node --check lib/market.js && node --check lib/strategy.js && node --check lib/search.js && node --check lib/hub/schema.js && node --check lib/hub/store.js && node --check lib/hub/tagging.js && node --check lib/hub/ingest.js && node --check lib/hub/index.js && node --check lib/hub/sources.js && node --check lib/hub/upstream.js && node --check lib/hub/cache.js && node --check lib/hub/membership.js && node --check lib/hub/summarize.js && node --check lib/hub/config.js && node --check lib/hub/parts.js && node --check lib/hub/frontpage.js && node --check lib/hub/digest.js && node --check client.js",
+    "test": "node --test \"test/**/*.test.mjs\"",
     "verify:api": "node verification/verify-api.mjs",
     "verify:quant-api": "node verification/verify-quant-api.mjs",
-    "verify:quant-ui": "node verification/verify-quant-ui.mjs"
+    "verify:strategy": "node verification/verify-strategy.mjs",
+    "verify:quant-ui": "node verification/verify-quant-ui.mjs",
+    "verify:hub": "node verification/verify-hub.mjs",
+    "verify:sources": "node verification/verify-sources.mjs"
   }
 }

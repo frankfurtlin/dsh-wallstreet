@@ -4,7 +4,7 @@
 
 **DSH 里的投资研究面板：A 股/港股/美股盘面、异动盯盘、研究归档与策略口径。**
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue)](package.json)
+[![Version](https://img.shields.io/badge/version-0.9.0-blue)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) · **简体中文**
@@ -23,9 +23,17 @@
 
 - **盘面**：全球 10 个指数、上证分时（含涨跌幅 Y 轴与十字线）、市场温度 0–100、市场宽度、板块轮动、上证 60 日日 K。
 - **异动**：涨停池（含连板数）、龙虎榜、全市场涨跌幅前 8/后 8、行业资金净流入/流出，个股可点开弹层看报价、分时与日 K。
+- **资讯**：12 个启用上游源入站（快讯 / 公告 / 研报 / 政策，共 13 个适配器），按事件聚簇去重（标题 + 正文首段）、规则打标打分，落 SQLite 可回溯；同事件多源合并成一条带「N 家」角标，可按类型 / 关键词 / 个股 / 板块筛选，并带数据源健康度面板。
+- **盘面 ↔ 资讯联动**：板块轮动每行挂「资讯 N」徽标，点整行直接跳到资讯 tab 并按该板块过滤；拿到板块成分股时按成分股精确统计（徽标 title 标注口径），否则退回关键词；沪市只有日期的公告显示「当日」而不是 00:00。
+- **今日头版**：一屏四件事——今日要闻（重要度≥60、同票只一条）、板块热度前 3、我关注的票有没有消息、当天总量；全部规则计算，不调模型。
+- **每日日报**：每天 23:30 自动导出 Markdown + HTML（`data/digest/`），面板可一键导出、一键发进知识库。
+- **源可配置**：面板「数据源 → 配置源」里逐源开关、调抓取间隔（1 分钟–1 小时），落 `data/hub-settings.json`，改完下一轮入站生效，不用重载插件。
+- **重要度可解释**：分数由「类型基准 / 事件类型 / 个股 / 自选 / 涨停龙虎榜 / 市场含义 / 政务降权 / 多源扩散」分量相加，hover 红点看拆解；政策类无市场含义封顶 58。
+- **AI 摘要**：重要度 ≥62 的事件自动生成一句话摘要 + 多空倾向（走宿主自己的模型、每轮最多 3 条、同一事件只写一次），面板显示「AI 中性 …」，工具输出里也带。
 - **研究**：归档研究结论与 34 份回测、估值分位 / 两融 / 股指期货 / 商品、持仓集中度、近 40 个交易日市场情绪历史。
 - **策略口径**：8 个纯函数（配置表、风控红线、分级止损、年度熔断、网格计划、双低筛选、轮动打分、收益归因），10 万 / 50 万两套画像。
 - **资料检索**：妙想金融资讯与 Tavily 全网两个引擎，补上面板原有资讯只有最近几小时时间流的缺口。
+- **Agent 工具**：`wallstreet_news` 把资讯库暴露给模型，对话里可直接问「今天有色板块有什么消息」「601600 最近有什么公告」，不用再去网上现搜。
 - **数据分层**：盘中实时（60 秒缓存）、盘中慢数据（收盘快照）、盘后统一读落盘 JSON 三层，失败按分区降级并标注来源。
 - **只读安全**：不接账户、不下单、不存用户数据；所有接口先过 DSH 登录闸门，未登录 401、非受信 Host 403。
 
@@ -52,7 +60,7 @@ systemctl restart deepseek-harness   # 让新的 cordis patch 生效
 2. **盘中慢数据**：龙虎榜、两融、估值、OMO 等收盘后才产生的数据仍取最新收盘快照，
    页头与分区角标会标出「收盘快照」。
 3. **盘后（含周末/盘前）**：全部改用 market-report 每日 15:10 落盘的
-   `/root/market_data.json`（`/root/workspace/market-report/` 管线）与 `/root/flow_full.json`，
+   `data/market_data.json`（本插件 data/ 下，采集管线写入）与 `/root/flow_full.json`，
    并标注快照日期与抓取时间。
 
 首页头部右上角统一显示当前口径：盘中是「盘中实时 · HH:MM 更新」，盘后是
@@ -138,6 +146,68 @@ systemctl restart deepseek-harness   # 让新的 cordis patch 生效
 三源合并后按时间倒序、60 秒缓存，最多 40 条；每条带来源标签、时间、标题、摘要，
 点击在新标签页打开原文（`target=_blank rel="noopener noreferrer"`）。单个源失败只降级该源。
 
+> 2026-11-25 起，这条「三源时间流」被下面的**资讯中心**取代（研究 tab 里那块保留作兼容）。
+> 见闻的原域名 `api-one.wallstcn.com` 实测已挂（http 000），资讯中心全部改走 `api-one-wscn.awtmt.com`。
+
+## 资讯中心（信息集散，2026-11-25）
+
+一句话：**条目进，事件出。** 多源抓取归一化成 `item` 落 SQLite，同事件聚成 `event`，
+规则打标打分，再从面板「资讯」tab 与 agent tool `wallstreet_news` 两个出口分发。
+
+```
+12 源 ─适配器→ 归一化 item ─聚簇(event)→ 规则打标/打分 ─┬→ 面板「资讯」tab
+(快讯/公告/研报/政策)                                  ├→ wallstreet_news 工具
+                                                      └→ /wallstreet/api/hub/*
+```
+
+### 上游源（实测可用 11 个，1 个明确不可用）
+
+| id | 源 | 类型 | 端点 / 说明 |
+| --- | --- | --- | --- |
+| `sina` | 新浪财经 | 快讯 | `feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2516`（需 referer） |
+| `wscn` | 华尔街见闻 | 快讯 | `api-one-wscn.awtmt.com/apiv1/content/lives?channel=global-channel` |
+| `sina-global` | 新浪 7×24 | 快讯 | `zhibo.sina.com.cn/api/zhibo/feed?zhibo_id=152`，带市场相关性过滤 |
+| `cls` | 财联社 | 快讯 | 直连要签名（404），改读 market-report 快照里的 `cls_news` |
+| `em-flash` | 东财快讯 | 快讯 | `np-listapi.eastmoney.com/comm/web/getNewsByColumns`，**必须带 `req_trace=1`**（不带返回 87 字节错误信封）；与 push2 是不同子服务、独立限流 |
+| `cninfo-sz` / `cninfo-sh` | 巨潮公告 | 公告 | `hisAnnouncement/query`（POST，**必须带 plate=sz/sh**） |
+| `em-ann` | 东财公告 | 公告 | `np-anotice-stock.eastmoney.com/api/security/ann` |
+| `em-report` | 东财研报 | 研报 | `reportapi.eastmoney.com/report/list`（行业名在 `indvInduName`） |
+| `gov-policy` | 国务院政策 | 政策 | `www.gov.cn/zhengce/zuixin/ZUIXINZHENGCE.json` |
+| `pbc` | 央行 | 政策 | 规章 / 征求意见列表页（HTML，标题取 `<a title>`） |
+| `stats` | 统计局 | 政策 | `www.stats.gov.cn/sj/zxfb/` |
+| `csrc` | 证监会 | 政策 | **enabled:false** —— 静态列表冻结在 2021-12，新列表接口恒返回 0 |
+
+### 数据模型与存储
+
+- `item`：`{id, ts, source, kind, title, summary, url, tickers[], sectors[], eventType, importance}`，
+  `id = sha1(source|url||title)`，重复抓取天然去重。
+- `event`：簇内首曝条目为主，带 `sources[]`、`sourceCount`（N 家角标）、`tickers` 并集；
+  面板与工具都只读事件，点开才看簇内各源原文。
+- 存储：`node:sqlite`（Node 24 内置 `DatabaseSync`，**零第三方依赖**）→ `data/hub.db`，WAL；
+  `items` / `events` / `event_items` / `source_state` / `meta` 五张表，保留 30 天（按入库时间清）。
+- 聚簇阈值按 `kind` 分档：公告/研报要求标题高度相似（0.85 / 0.72，且不允许「仅共享个股」合并，
+  避免同一只票的「辞职/处罚/续聘」三份公告被揉成一条）；快讯允许共享个股 + 0.42 相似度。
+  相似度 = 3-gram Jaccard 与 LCS 占比取大（长前缀改写的中文标题也能识别）。
+- 打标：13 类事件规则表（货币政策 / 宏观数据 / 政策法规 / 风险事件 / 重组并购 / 业绩 /
+  中标合同 / 停复牌 / 融资 / 减持增持 / 分红送转 / 涨价提价 / 海外市场）；
+  个股与板块词典来自 market-report 快照 + 持仓快照（不硬编码），重要度 = 类型基准 + 标的加权，
+  自选持仓 +10，政务类（节假日/保护区/表彰…）−22。
+- 调度：盘中 1×、盘后 4×、周末 8× 各源 `intervalMs`；每 30 秒 tick 一次但只抓到期源，
+  失败写进 `source_state`（面板与 `/hub/stats` 可见），单个源挂不影响其它源。
+
+### API 与工具
+
+| 端点 | 说明 |
+| --- | --- |
+| `GET /wallstreet/api/hub/feed` | 事件流；`since/limit/kind/source/ticker/sector/eventType/minImportance/q` |
+| `GET /wallstreet/api/hub/stats` | 总量、时间跨度、每源健康度、kind / 事件类型分布、今日事件数 |
+| `GET /wallstreet/api/hub/sectors` | 板块聚合：总览（`since/limit`）或按名字计数（`names=a,b,c`，盘面徽标用） |
+| `GET /wallstreet/api/hub/event?id=` | 单个事件 + 簇内全部条目 |
+| `POST /wallstreet/api/hub/sync` | 立即抓一轮（面板「立即同步」用） |
+
+agent 工具 `wallstreet_news({query, ticker, sector, kind, sinceHours, limit, minImportance})`
+返回纯文本清单（时间 / 事件类型 / 标题 / 来源数 / 代码 / 原文链接），末尾给来源分布与数据口径。
+
 ## 市场温度怎么算
 
 ```
@@ -157,7 +227,7 @@ A 股日内成交分布锚点（开盘半小时最密、午盘清淡、尾盘放
 
 `/root/workspace/quant` 已于 2026-11-12 整体删除。为保住每日数据与既有研究产出，做了两件事：
 
-1. **每日采集/日报管线迁出**为独立项目 `/root/workspace/market-report`（cron 任务不变：
+1. **每日采集/日报管线迁出**为独立管线 `/root/scripts/market-report`（cron 任务不变：
    每交易日 15:10 由 Hermes 执行 `~/.hermes/scripts/run_market_report.sh`，产出
    `/root/market_data.json`、`/root/flow_full.json` 与 betterlife 日报）。
 2. **研究快照随插件归档**在 `data/quant-archive/`（结论文档、34 份回测结果、持仓集中度
@@ -171,7 +241,7 @@ A 股日内成交分布锚点（开盘半小时最密、午盘清淡、尾盘放
 | 估值分位 / 两融 / 期货商品 | `/root/market_data.json`（交易日 15:11 更新） | PE(TTM) 历史分位、沪深两融、股指期货、BC 指数与沪金/沪银/沪铜/沪铝 |
 | 持仓集中度 | `data/quant-archive/data/holdings_concentration_<date>.json` | 分组权重、HHI、风险簇权重与 alerts；快照过期会显示年龄提示（归档快照） |
 | 新闻/公告 | `/root/market_data.json` | 央行 OMO、财联社电报、公告与快讯 |
-| 市场情绪历史 | `market-report/data/market_daily_snapshot.jsonl`（近 40 个交易日） | 涨停/跌停家数双折线 + 两市成交额走势；纵轴按 90 分位缩放，峰值单独标注 |
+| 市场情绪历史 | `data/market_daily_snapshot.jsonl`（插件 data/ 下）（近 40 个交易日） | 涨停/跌停家数双折线 + 两市成交额走势；纵轴按 90 分位缩放，峰值单独标注 |
 
 市场数据文件由 market-report 管线每日更新，因此面板不轮询，只提供「刷新」按钮；管线
 当天没跑或文件缺失时，对应分区降级显示提示，不影响盘面与异动。
@@ -290,9 +360,13 @@ quant 接口（同前缀 `/wallstreet/api`）：
 
 ```bash
 cd /root/workspace/plugins/dsh-wallstreet
-npm run check              # node --check 三个文件
+npm run check              # node --check 全部宿主/客户端文件
 npm run verify:api         # 打真实上游，断言数据形状与关键字段
 npm run verify:quant-api   # 走 DSH cookie，断言 /wallstreet/api/quant/*
+npm test                   # 335 个纯函数单测（node:test，按模块拆 12 个文件）
+npm run verify:sources     # 12 个资讯源逐源实测（条数/字段/耗时/错误）
+npm run verify:hub         # 资讯中心端到端：入库→聚簇→打标→查询→工具（含真实上游）
+SKIP_LIVE=1 npm run verify:hub   # 只跑离线段（无网环境）
 
 # DSH 内浏览器验收（Playwright headless，token 从 dsh web 启动日志取）
 node verification/verify-ui.mjs --token='<dsh web token>'        # 盘面/异动/研究 三 tab + 侧栏顺序
@@ -306,9 +380,15 @@ token 可从宿主日志取：
 journalctl -u deepseek-harness --no-pager --since today | grep -o 'token=[A-Za-z0-9_-]*' | tail -1
 ```
 
-### 后端改动如何生效（要重启宿主，注意时机）
+### 后端改动如何生效（HMR 优先，重启兜底）
 
-`lib/*.js` 是宿主端代码，改完必须重启 `deepseek-harness` 才生效；在回合内直接重启会打断
+**2026-11-25 实测可行的快捷方式**：在 `/root/.dsh/profiles/web/cordis.patch.yml` 末尾追加一行注释
+（等价于 touch 该文件）会触发 `dsh-hmr` 就地重载本插件——宿主 PID 不变、当前回合不中断，
+几秒后日志出现 `[dsh-wallstreet] 资讯库就绪` 与新一批 `hub xxx: N 条` 即生效。本次资讯中心的
+多轮迭代就是这么上的（含客户端半：刷新页面即可）。
+
+HMR 不生效或改了 profile/依赖时，仍要重启宿主：`lib/*.js` 是宿主端代码，改完必须重启
+`deepseek-harness` 才生效；在回合内直接重启会打断
 正在跑的回合。用 `/root/workspace/tools/dsh-reload-when-idle.mjs`：按会话事件判定空闲
 （最后一条事件是 `turn/end` 之类才算空闲，长工具调用期间不会被误判），空闲 10 分钟后重启，
 脚本必须跑在独立 cgroup（`systemd-run`）里，否则会跟着服务一起被杀：
@@ -364,7 +444,7 @@ DSH_WEB_URL=http://127.0.0.1:3090 node verification/verify-ui.mjs --token=...
 
 ### 验收结果（2026-11-12 15:15，quant 删除 + 管线迁移后）
 
-`/root/workspace/quant` 已删除，采集/渲染管线迁到 `/root/workspace/market-report`：
+`/root/workspace/quant` 已删除，采集/渲染管线迁到 `/root/scripts/market-report`（2026-11-25 再次迁到 scripts/，数据落到插件 data/）：
 迁移后的完整 cron 流程实跑一次，**QC 16/16 PASS**，15:14:41 生成并部署
 `reports/20261112/a-share-market-overview-20261112.html`；dsh-kb 已自动收录
 （标题「A股市场全景分析报告 | 2026-11-12 收盘」）。研究快照归档在 `data/quant-archive/`。
@@ -519,3 +599,95 @@ verification/           # verify-api.mjs / verify-ui.mjs / verify-quant-api.mjs 
 
 自选股列表与提醒、板块/概念资金流排行、北向资金、涨跌停复盘（连板梯队/炸板率）、
 温度历史曲线（需管线在快照里补 breadth 字段）、把更多实时数据落盘形成本地时间序列。
+
+## 验收结果（2026-11-25 12:05，资讯中心 P0，主服务 3080）
+
+环境：`deepseek-harness` PID 2858482 未重启，通过编辑 profile patch 触发 HMR 就地重载。
+
+| 项 | 结果 | 证据 |
+| --- | --- | --- |
+| 宿主模块加载 | ✅ `import('./lib/index.js')` 正常，`inject=['webServer','tools']` | node 直跑 |
+| 资讯源实抓 | ✅ 11/11 启用源各返回 >0 条（csrc 明确 disabled） | `npm run verify:sources` |
+| 端到端离线验收 | ✅ 12/12（入库/聚簇/打标/过滤/工具） | `SKIP_LIVE=1 npm run verify:hub` |
+| 端到端含真实上游 | ✅ 13/13 全过（11 源 297 条入库） | `npm run verify:hub` |
+| API 实测 | ✅ `/hub/stats` 200（310 条 / 208 事件 / 11 源，12:12）、`/hub/feed` 的 kind/ticker/q/minImportance 过滤均生效 | 面板内 fetch 断言 |
+| 面板「资讯」tab | ✅ 统计条 / 类型 chips / 关键词 / 个股筛选 / `N 家` 角标 / 展开源链接全部正确 | `verification/shots/hub-final.png` |
+| 「立即同步」 | ✅ POST 200 → 「已入库 2 条 · 2.6s」，计数 129→130、299→301 | `verification/shots/hub-expanded.png` |
+| 规则回填 | ✅ 重载后 308 条条目重算，「节假日通知」重要度 70→48，≥65 事件由 6 条降到 4 条 | `journalctl -u deepseek-harness` |
+| agent tool | ✅ `wallstreet_news` 出现在 Tool 清单（95 工具），实际调用返回事件清单 | 见下 |
+
+工具实际调用样例：
+
+```
+> wallstreet_news({ query: "铝", sinceHours: 24, limit: 5 })
+
+近 24 小时资讯（关键词「铝」）：共 1 个事件，列 1 条
+
+1. 11-24 15:01 [快讯] 中铝集团所属企业原专职董事富崇彦接受纪律审查和监察调查
+    https://...
+—— 来源分布：财联社1｜数据口径：非交易时段同步
+```
+
+未做（P1/P2）：重要度打分细调、盘面（板块异动）与事件时间轴对齐、推送开关、
+面板侧 `bySource/byKind` 健康度卡片、跨源正文去重（目前按标题聚簇）。
+
+### 验收结果（2026-11-25 14:05，资讯中心 P1，主服务 3080）
+
+| 项 | 结果 | 证据 |
+| --- | --- | --- |
+| 语法 | ✅ `npm run check` 11 文件全过 | — |
+| 端到端（含真实上游） | ✅ 16/16（新增 3 条 P1 用例：正文去重 / 板块核心词对齐 / sector 兜底） | `npm run verify:hub` |
+| 板块对齐 | ✅ `names=半导体,水产养殖,集成电路封测` → 1 / 0 / 1；`sector=芯片` 与 `sector=半导体` 命中同一批 | verify 脚本 + API 实测 |
+| 盘面徽标 | ✅ 16 个板块行中 9 个显示「资讯 N」（半导体设备 17、电子化学品 22、集成电路封测 4…） | `verification/shots/p1-market-sector-badges.png` |
+| 点板块 → 资讯 | ✅ 切到资讯 tab，出现「来自盘面：半导体材料 ×」，筛选框回填，匹配 21；点 × 清空 | `verification/shots/p1-news-sector-filter.png` |
+| 源健康度卡 | ✅ 「数据源 11」展开：11 个源逐行给入库条数与最近成功时间，「全部正常」 | `verification/shots/p1-news-sources.png` |
+| 日期级公告 | ✅ 沪市公告显示「11-24 当日」，不再出现 00:00；`since` 窗口已纳入同日日期级事件 | 面板实测（华发股份 4 条） |
+| 回归 | ✅ 盘面 / 异动 / 研究 / 策略四 tab 正常，离开资讯 tab 后 hub DOM 全清 | 面板实测 |
+
+### 验收结果（2026-11-25 15:45，资讯中心 P2，主服务 3080）
+
+| 项 | 结果 | 证据 |
+| --- | --- | --- |
+| 语法 | ✅ `npm run check` 12 文件全过 | — |
+| 端到端（含真实上游） | ✅ **21/21**（新增 7 条 P2 用例：分量封顶 / 风险评分 / 成分股机制 / 摘要生成 / 摘要降级） | `npm run verify:hub` |
+| 重要度拆解 | ✅ 面板 hover 红点显示「重要度 73 / 类型基准 +40 / 事件类型 +20 / 涉及个股 +8 / 市场含义 +5」 | 面板实测（狮头股份） |
+| 政务封顶 | ✅ 「节假日安排」42 分、「修改行政法规」58 分，均不进前列 | verify 脚本 |
+| AI 摘要 | ✅ 真实模型（opencode-go/deepseek-v4.1-flash）生成 6 条，单条约 300 tokens；面板显示「AI 中性 …」，解析失败不写库 | `verification/shots/p2-ai-summary.png` |
+| AI 摘要降级 | ✅ 无默认模型时返回「宿主没有可用的默认模型」，面板不显示 AI 行 | verify 脚本 |
+| 成分股机制 | ✅ 预置缓存后 `basis=members`、按成分股精确计数与过滤 | verify 脚本 |
+| 成分股实况 | ⚠️ 东财 push2 主域+82/48 子域当前全 `http 000`（RST），只缓存到 2 个板块 / 46 只；其余走关键词口径，后台队列每 30 秒补 3 个 | `data/sector-members.json`、源健康度卡「成分股 2 个板块 / 46 只」 |
+
+### 验收结果（2026-11-25 18:40，P3：对照同类插件的七处收口，主服务 3080）
+
+| 项 | 结果 |
+| --- | --- |
+| `npm run verify:hub`（含真实上游） | ✅ **25/25**，12/12 源可用，320 条入库 |
+| `node verification/verify-sources.mjs` | ✅ 12/12 启用源 >0 条；`em-flash` 8 条离线契约断言全过 |
+| 新增源 | ✅ 东财快讯（`req_trace=1`）20 条/轮，与 push2 独立限流 |
+| 统一上游模块 | ✅ 500 重试 / 404 不重试 / 超时文案取实际预算 / 非 JSON 报 parse / GBK 自动识别（本地假服务器实测） |
+| 三档缓存 | ✅ 并发只打一次上游、过期可 `peek`、上限淘汰 |
+| AI 摘要 | ✅ maxTokens 4096；失败按原因归类（中止 / TRANSPORT）；JSON 失败退纯文本兜底 |
+| 面板 | ✅ 源健康度卡显示 12 个源；次日披露的公告显示「11-26 次日」，且不再压过当晚实时资讯 |
+
+### 验收结果（2026-11-25 20:00，P4：源配置面 + 单测拆分，主服务 3080）
+
+| 项 | 结果 |
+| --- | --- |
+| `npm test` | ✅ **262/262** 通过（8 个文件，22 个文件头外的临时目录全清理） |
+| `npm run verify:hub`（含真实上游） | ✅ **25/25**，12/12 源可用 |
+| 源配置 API | ✅ `GET /hub/config` 返回 13 条（默认值 + 有效值 + `overridden`）；`POST` 保存后下一轮入站生效；未知源返回「未知数据源：nope」；非法间隔拒绝 |
+| 源配置面板 | ✅ 13 行开关 + 间隔下拉；改 2 条 →「已保存 2 条改动」；当前间隔不在预设时自动补选项（央行 1 小时） |
+| 单测翻出缺陷 | ✅ D1–D6 全部修复，并补了 3 条回归用例（默认值不被覆盖带偏 / `timeoutMs` 保留 / 显式时区解析） |
+| 行为修正 | ✅ `titleHints` 单字不再静默失效；`minImportance: 0` 能表示「全部」 |
+
+### 验收结果（2026-11-25 21:20，P5：第二轮调研六条落地，主服务 3080）
+
+| 项 | 结果 |
+| --- | --- |
+| `npm test` | ✅ **335/335**（parts 11 / frontpage 12 / digest 29 / schema 新增 21） |
+| `npm run check` | ✅ 18 个 lib 文件 + client.js |
+| `npm run verify:hub`（含真实上游） | ✅ 25/25，12/12 源 |
+| 标题相似度 | ✅ 英文近似对 0.8、无关对 0.0（旧口径 1.0 / 0.42）；CJK 短标题 bigram 比 trigram 更敏感；生产库 73 万候选对仅 4 对不同、阈值不变 |
+| 盘面四态 | ✅ `parts[]` 每分区耗时/状态，失败有旧值时 `stale` 兜底，超时不取消并落缓存 |
+| 日报 | ✅ 面板「导出日报」10.8 KB / 1621 条；「发到知识库」实测 `doc/6b06df33a756504f` 可查 |
+| 头版 | ✅ 要闻 5 条 / 板块热度 3 个 / 关注股 3 条（中国铝业、隆基绿能、牧原股份） |

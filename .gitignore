@@ -129,3 +129,13 @@ Thumbs.db
 # README 用的界面截图要在 GitHub 上能显示
 !docs/screenshots/
 !docs/screenshots/**
+
+# 资讯中心运行期缓存（可随时重建，不入库）
+data/sector-members.json
+data/hub.db*
+data/digest/
+data/flow_full.json
+data/hub-settings.json
+data/market_daily_snapshot.jsonl
+data/market_data.json
+data/market_data_supp.json

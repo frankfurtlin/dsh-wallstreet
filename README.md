@@ -54,7 +54,7 @@ Everything is read-only: no brokerage account, no orders, no user data stored.
 | `MX_APIKEY` | — | Eastmoney Miaoxiang search key, used by `engine=mx` (the default) |
 | `TAVILY_API_KEY` | — | Tavily key, used by `engine=tavily` |
 | `DSH_WALLSTREET_ENV` | `<plugin>/.env.local` | the file the two keys are read from |
-| `DSH_WALLSTREET_MARKET_JSON` | `/root/workspace/market-report/data/market_data.json` | daily close snapshot behind market, research and history |
+| `DSH_WALLSTREET_MARKET_JSON` | `/root/workspace/plugins/dsh-wallstreet/data/market_data.json` | daily close snapshot behind market, research and history |
 | `DSH_WALLSTREET_SNAPSHOT` | `…/market_daily_snapshot.jsonl` | 40-day sentiment history |
 | `DSH_WALLSTREET_QUANT_ROOT` | `<plugin>/data/quant-archive` | archived conclusion, 34 backtests, holdings snapshots |
 

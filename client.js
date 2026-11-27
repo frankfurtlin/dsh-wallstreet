@@ -895,9 +895,126 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** 行业板块：领涨 / 领跌，各带主力净流入。 */
+    /** 板块行：hover 有反馈、可点击；有 24h 资讯时在涨跌幅旁边挂「资讯 N」徽标。 */
+    function SectorRow(props) {
+      var hoverState = react.useState(false);
+      var hover = hoverState[0];
+      var setHover = hoverState[1];
+      var row = props.row || {};
+      var clickable = typeof props.onPick === "function" && !!row.name;
+      // props.news 现在是 {count, basis, members}：basis=members 表示按成分股算的，
+      // =keywords 表示上游成分股没拿到、退回关键词口径（徽标上要能看出区别）。
+      var newsInfo = props.news && typeof props.news === "object" ? props.news : null;
+      var news = newsInfo && isNum(newsInfo.count) ? newsInfo.count : isNum(props.news) ? props.news : 0;
+      return h(
+        "div",
+        {
+          "data-wallstreet-sector-row": row.name || "",
+          onClick: function () {
+            if (clickable) props.onPick(row.name, row.code);
+          },
+          onMouseEnter: function () {
+            if (clickable) setHover(true);
+          },
+          onMouseLeave: function () {
+            setHover(false);
+          },
+          title: clickable ? "查看「" + row.name + "」相关资讯" : "",
+          style: {
+            display: "flex",
+            alignItems: "baseline",
+            gap: 8,
+            fontSize: 12.5,
+            padding: "3px 6px",
+            margin: "0 -6px",
+            borderRadius: 6,
+            fontVariantNumeric: "tabular-nums",
+            cursor: clickable ? "pointer" : "default",
+            background: hover ? COLORS.chip : "transparent",
+            transition: "background 120ms ease",
+          },
+        },
+        h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.name),
+        h(
+          "span",
+          { style: { color: COLORS.muted, fontSize: 11 } },
+          row.mainInflow == null ? "" : "主力 " + signedYi(row.mainInflow),
+        ),
+        news > 0
+          ? h(
+              "span",
+              {
+                "data-wallstreet-sector-news": news,
+                title:
+                  newsInfo && newsInfo.basis === "members"
+                    ? "按板块成分股（" + (newsInfo.members || 0) + " 只）统计的 24h 资讯"
+                    : "关键词口径：还没拿到该板块成分股，标题命中核心词即计入",
+                style: { flexShrink: 0 },
+              },
+              h(Tag, null, "资讯 " + news),
+            )
+          : null,
+        h("span", { style: { color: props.color, fontWeight: 600, width: 58, textAlign: "right" } }, pctText(row.changePct)),
+      );
+    }
+
+    /** 行业板块：领涨 / 领跌，各带主力净流入；行可点击进资讯筛选，右侧挂 24h 资讯数。 */
     function SectorCard(props) {
       var sectors = props.sectors;
+      // 一次请求拿全部板块的 24h 资讯数（最多 16 个名字）；拿不到就整体不显示徽标，不影响板块列表本身。
+      var names = [];
+      // 名字后面带上板块代码（BKxxxx）：后端有 code 就不用翻板块名单，能直接抓成分股。
+      var seen = {};
+      var collect = function (rows) {
+        (rows || []).forEach(function (row) {
+          if (!row || !row.name) return;
+          var name = String(row.name);
+          if (seen[name]) return;
+          seen[name] = true;
+          var code = row.code && /^BK\d+$/.test(String(row.code)) ? String(row.code) : "";
+          names.push(code ? name + ":" + code : name);
+        });
+      };
+      if (sectors) {
+        collect(sectors.gainers);
+        collect(sectors.losers);
+      }
+      var namesKey = names.slice(0, 16).join(",");
+      var newsState = react.useState(null);
+      var newsMap = newsState[0];
+      var setNewsMap = newsState[1];
+      react.useEffect(
+        function () {
+          if (!namesKey) {
+            setNewsMap(null);
+            return undefined;
+          }
+          var alive = true;
+          // 只发一次，不轮询；盘面卸载（alive=false）后不再 setState。
+          hubFetch("/hub/sectors?names=" + encodeURIComponent(namesKey) + "&since=24h")
+            .then(function (body) {
+              if (!alive) return;
+              var map = {};
+              (Array.isArray(body.sectors) ? body.sectors : []).forEach(function (item) {
+                if (!item || !item.name) return;
+                var key = String(item.name).split(":")[0];
+                map[key] = {
+                  count: isNum(item.events) ? item.events : 0,
+                  basis: item.basis === "members" ? "members" : "keywords",
+                  members: isNum(item.members) ? item.members : 0,
+                };
+              });
+              setNewsMap(map);
+            })
+            .catch(function () {
+              if (alive) setNewsMap(null);
+            });
+          return function () {
+            alive = false;
+          };
+        },
+        [namesKey],
+      );
       if (!sectors || ((sectors.gainers || []).length === 0 && (sectors.losers || []).length === 0)) {
         return h(EmptyHint, null, "板块数据暂不可用");
       }
@@ -906,27 +1023,13 @@ window.__ModuleLoader__.load({
           "div",
           { style: { display: "flex", flexDirection: "column", gap: 2 } },
           rows.map(function (row) {
-            return h(
-              "div",
-              {
-                key: row.code + color,
-                style: {
-                  display: "flex",
-                  alignItems: "baseline",
-                  gap: 8,
-                  fontSize: 12.5,
-                  padding: "3px 0",
-                  fontVariantNumeric: "tabular-nums",
-                },
-              },
-              h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.name),
-              h(
-                "span",
-                { style: { color: COLORS.muted, fontSize: 11 } },
-                row.mainInflow == null ? "" : "主力 " + signedYi(row.mainInflow),
-              ),
-              h("span", { style: { color: color, fontWeight: 600, width: 58, textAlign: "right" } }, pctText(row.changePct)),
-            );
+            return h(SectorRow, {
+              key: row.code + color,
+              row: row,
+              color: color,
+              news: newsMap ? newsMap[row.name] : null,
+              onPick: props.onPickSector,
+            });
           }),
         );
       };
@@ -2046,7 +2149,7 @@ window.__ModuleLoader__.load({
             { style: { fontSize: 11.5, color: COLORS.faint, lineHeight: 1.7 } },
             payload.dataMode === "live"
               ? "数据来源：涨停池、涨跌幅榜与行业资金流为东方财富实时接口（60 秒缓存）；龙虎榜等收盘后才有的数据取 market-report 收盘快照。"
-              : "数据来源：market-report 每日收盘快照（/root/market_data.json、flow_full.json）。",
+              : "数据来源：market-report 每日收盘快照（写入本插件 data/ 下的 market_data.json、flow_full.json）。",
             warnings.length ? h("br") : null,
             warnings.length ? "部分数据降级：" + warnings.join("；") : null,
           ),
@@ -2276,6 +2379,211 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /* ------------------------------ 资料检索（妙想 / Tavily） ------------------------------ */
+
+    var SEARCH_ENGINES = [
+      { id: "mx", label: "金融资讯", hint: "东方财富妙想：新闻 / 公告 / 研报" },
+      { id: "tavily", label: "全网", hint: "Tavily：政策原文 / 海外报道 / 官网" },
+    ];
+
+    function ResourceSearch() {
+      var state = react.useState({
+        query: "",
+        engine: "mx",
+        loading: false,
+        error: "",
+        results: [],
+        answer: "",
+        total: 0,
+      });
+      var s = state[0];
+      var setState = state[1];
+
+      var run = react.useCallback(function (query, engine) {
+        var q = String(query || "").trim();
+        if (!q) return;
+        setState(function (prev) {
+          return Object.assign({}, prev, { loading: true, error: "", results: [], answer: "", total: 0 });
+        });
+        var url =
+          API +
+          "/research/search?engine=" +
+          encodeURIComponent(engine) +
+          "&limit=10&answer=1&q=" +
+          encodeURIComponent(q);
+        fetch(url, { headers: { accept: "application/json" }, credentials: "same-origin" })
+          .then(function (response) {
+            return response
+              .json()
+              .catch(function () {
+                return {};
+              })
+              .then(function (body) {
+                return { status: response.status, body: body || {} };
+              });
+          })
+          .then(function (res) {
+            if (res.body.ok === false || res.status >= 400) {
+              throw new Error(res.body.error || "HTTP " + res.status);
+            }
+            setState(function (prev) {
+              return Object.assign({}, prev, {
+                loading: false,
+                error: "",
+                results: res.body.results || [],
+                answer: res.body.answer || "",
+                total: res.body.total || 0,
+              });
+            });
+          })
+          .catch(function (error) {
+            setState(function (prev) {
+              return Object.assign({}, prev, {
+                loading: false,
+                error: error && error.message ? error.message : "检索失败",
+              });
+            });
+          });
+      }, []);
+
+      var engineMeta = SEARCH_ENGINES.filter(function (item) {
+        return item.id === s.engine;
+      })[0];
+
+      return h(
+        SectionCard,
+        {
+          id: "resource-search",
+          title: "资料检索",
+          hint: engineMeta ? engineMeta.hint : "",
+          extra: h(
+            "div",
+            { style: { display: "flex", gap: 6 } },
+            SEARCH_ENGINES.map(function (engine) {
+              var on = engine.id === s.engine;
+              return h(
+                "button",
+                {
+                  key: engine.id,
+                  type: "button",
+                  "data-engine": engine.id,
+                  onClick: function () {
+                    setState(function (prev) {
+                      return Object.assign({}, prev, { engine: engine.id });
+                    });
+                  },
+                  style: {
+                    padding: "3px 10px",
+                    borderRadius: 999,
+                    fontSize: 11.5,
+                    cursor: "pointer",
+                    border: "1px solid " + (on ? COLORS.border : "transparent"),
+                    background: on ? COLORS.chip : "transparent",
+                    color: on ? "inherit" : COLORS.muted,
+                  },
+                },
+                engine.label,
+              );
+            }),
+          ),
+        },
+        h(
+          "div",
+          { style: { display: "flex", gap: 8 } },
+          h("input", {
+            type: "search",
+            value: s.query,
+            placeholder: s.engine === "mx" ? "例：固态电池 进展 / 某只股票 最新公告" : "例：美股 AI 资本开支 最新",
+            "data-resource-query": "",
+            onChange: function (event) {
+              var value = event.target.value;
+              setState(function (prev) {
+                return Object.assign({}, prev, { query: value });
+              });
+            },
+            onKeyDown: function (event) {
+              if (event.key === "Enter") run(event.target.value, s.engine);
+            },
+            style: {
+              flex: 1,
+              minWidth: 0,
+              padding: "7px 10px",
+              borderRadius: 8,
+              border: "1px solid " + COLORS.border,
+              background: "transparent",
+              color: "inherit",
+              fontSize: 13,
+            },
+          }),
+          h(
+            ToolbarButton,
+            {
+              action: "resource-search",
+              primary: true,
+              onClick: function () {
+                run(s.query, s.engine);
+              },
+            },
+            s.loading ? "检索中…" : "检索",
+          ),
+        ),
+        s.error
+          ? h("div", { style: { fontSize: 12.5, color: COLORS.down, marginTop: 8 } }, s.error)
+          : null,
+        s.answer
+          ? h(
+              "div",
+              {
+                style: {
+                  marginTop: 10,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  background: COLORS.chip,
+                  fontSize: 12.5,
+                  lineHeight: 1.7,
+                },
+              },
+              s.answer,
+            )
+          : null,
+        s.results.length
+          ? h(
+              "div",
+              { style: { marginTop: 10, display: "flex", flexDirection: "column", gap: 8 } },
+              s.results.map(function (item, index) {
+                return h(
+                  "div",
+                  { key: index, "data-resource-result": "", style: { fontSize: 12.5, lineHeight: 1.65 } },
+                  h(
+                    "a",
+                    {
+                      href: item.url || "#",
+                      target: "_blank",
+                      rel: "noreferrer noopener",
+                      style: { color: "inherit", fontWeight: 600, textDecoration: "none" },
+                    },
+                    item.title || "（无标题）",
+                  ),
+                  h(
+                    "div",
+                    { style: { fontSize: 11.5, color: COLORS.muted } },
+                    [item.source, item.published, item.authority].filter(Boolean).join(" · "),
+                  ),
+                  h("div", { style: { color: COLORS.muted } }, item.snippet || ""),
+                );
+              }),
+              h(
+                "div",
+                { style: { fontSize: 11, color: COLORS.faint } },
+                "共 " + s.total + " 条；点击标题在新窗口打开原文",
+              ),
+            )
+          : s.loading
+            ? h("div", { style: { marginTop: 10, fontSize: 12.5, color: COLORS.muted } }, "正在检索…")
+            : null,
+      );
+    }
+
     function ResearchPanel(props) {
       var quant = useQuantData();
       var data = quant.data || {};
@@ -2311,6 +2619,7 @@ window.__ModuleLoader__.load({
           ),
         );
       }
+      sections.push(h(ResourceSearch, { key: "resource-search" }));
       if (data.research) sections.push(h(ResearchSection, { key: "research", research: data.research }));
       sections.push(h(HistorySection, { key: "history" }));
       if (data.overview) sections.push(h(ResearchDataSection, { key: "slow", data: data.overview }));
@@ -2341,6 +2650,1890 @@ window.__ModuleLoader__.load({
           "回测含幸存者偏差，α 应视为上界；仅供研究，不构成投资建议。",
           warnings.length ? h("br") : null,
           warnings.length ? "部分数据降级：" + warnings.join("；") : null,
+        ),
+      );
+    }
+
+    /* ------------------------------ 资讯 view（信息资讯集散中心） ------------------------------ */
+
+    /**
+     * hub 请求的统一入口：非 2xx、返回非 JSON、`ok: false` 一律翻译成人话错误。
+     * 后端 hub 可能还没部署完，所以错误只落到面板的错误态，绝不抛到组件外面。
+     */
+    function hubFetch(path, init) {
+      var options = Object.assign({ credentials: "same-origin", headers: { accept: "application/json" } }, init || {});
+      return fetch(API + path, options).then(function (response) {
+        if (!response.ok) {
+          throw new Error("资讯服务暂未就绪（HTTP " + response.status + "）");
+        }
+        return response.json().then(
+          function (body) {
+            if (!body || body.ok === false) throw new Error((body && body.error) || "资讯服务暂未就绪");
+            return body;
+          },
+          function () {
+            throw new Error("资讯服务暂未就绪（返回内容不是 JSON）");
+          },
+        );
+      });
+    }
+
+    function hubErrorText(error) {
+      var message = error && error.message ? String(error.message) : "未知错误";
+      return message.indexOf("资讯服务") === 0 ? message : "资讯服务暂未就绪：" + message;
+    }
+
+    var HUB_KIND_CHIPS = [
+      { id: "", label: "全部" },
+      { id: "flash", label: "快讯" },
+      { id: "announcement", label: "公告" },
+      { id: "report", label: "研报" },
+      { id: "policy", label: "政策" },
+    ];
+
+    function hubKindLabel(kind) {
+      for (var index = 0; index < HUB_KIND_CHIPS.length; index += 1) {
+        if (HUB_KIND_CHIPS[index].id === kind) return HUB_KIND_CHIPS[index].label;
+      }
+      return kind || "资讯";
+    }
+
+    /**
+     * 重要度拆解文案：把后端 `importanceParts` 拼成「为什么这条分高」，
+     * 给圆点和标题的 title 属性用。分量缺失时退回只显示总分。
+     */
+    var HUB_PART_LABELS = {
+      kind: "类型基准",
+      type: "事件类型",
+      ticker: "涉及个股",
+      multi: "多标的",
+      watch: "自选持仓",
+      hot: "涨停/龙虎榜",
+      market: "市场含义",
+      demote: "政务降权",
+      degraded: "时间兜底",
+      diffusion: "多源扩散",
+    };
+
+    function hubImportanceDetail(event) {
+      var parts = event && event.importanceParts;
+      var head = "重要度 " + (event && event.importance != null ? event.importance : "—");
+      if (!parts || typeof parts !== "object") return head;
+      var lines = [];
+      Object.keys(HUB_PART_LABELS).forEach(function (key) {
+        var value = parts[key];
+        if (!isNum(value) || value === 0) return;
+        lines.push("  " + HUB_PART_LABELS[key] + " " + (value > 0 ? "+" : "") + value);
+      });
+      return lines.length ? head + "\n" + lines.join("\n") : head;
+    }
+
+    /** AI 摘要行的色调：利好红、利空绿（A 股口径），中性灰。 */
+    function hubSentimentColor(sentiment) {
+      if (sentiment === "利好") return COLORS.up;
+      if (sentiment === "利空") return COLORS.down;
+      return COLORS.muted;
+    }
+
+    /**
+     * 事件时间：今天只给 HH:MM，跨天补 MM-DD，列表里一眼能看出新旧。
+     * 后端 timeUnknown=true 表示上游只给了日期（巨潮沪市公告，ts 落在当日 00:00），
+     * 这时显示「当日」，不要用 00:00 冒充一个不存在的时分。
+     */
+    function hubTimeText(ts, timeUnknown) {
+      if (!isNum(ts) || ts <= 0) return "—";
+      var date = new Date(ts);
+      if (!Number.isFinite(date.getTime())) return "—";
+      var pad = function (value) {
+        return value < 10 ? "0" + value : String(value);
+      };
+      var now = new Date();
+      var sameDay =
+        date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+      // 未来的日期 = 盘后披露、次日才生效的公告（巨潮就是这么标的）。
+      // 直接显示「11-26 当日」会让人以为穿越了，改成「11-26 次日」。
+      // 注意不能用「差 6 小时」判断：盘后 18:30 看次日 00:00 只差 5.5 小时。
+      var isFuture = !sameDay && date.getTime() > now.getTime();
+      if (timeUnknown === true) {
+        if (sameDay) return "当日";
+        var stamp = pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+        return isFuture ? stamp + " 次日" : stamp + " 当日";
+      }
+      var clock = pad(date.getHours()) + ":" + pad(date.getMinutes());
+      return sameDay ? clock : pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + " " + clock;
+    }
+
+    function hubAgoText(iso) {
+      var time = iso ? new Date(iso).getTime() : NaN;
+      if (!Number.isFinite(time)) return "";
+      var diff = Math.max(0, Date.now() - time);
+      if (diff < 60000) return "刚刚";
+      if (diff < 3600000) return Math.round(diff / 60000) + " 分钟前";
+      if (diff < 86400000) return Math.round(diff / 3600000) + " 小时前";
+      return Math.round(diff / 86400000) + " 天前";
+    }
+
+    /** 源健康度的时间戳（`lastOk` / `lastErrorAt`）是 epoch ms，不是 ISO，单独格式化。 */
+    function hubStampText(ts) {
+      if (!isNum(ts) || ts <= 0) return "—";
+      var date = new Date(ts);
+      if (!Number.isFinite(date.getTime())) return "—";
+      var pad = function (value) {
+        return value < 10 ? "0" + value : String(value);
+      };
+      var sameYear = new Date().getFullYear() === date.getFullYear();
+      var day = pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+      var clock = pad(date.getHours()) + ":" + pad(date.getMinutes());
+      return (sameYear ? "" : date.getFullYear() + "-") + day + " " + clock;
+    }
+
+    function hubCountText(value) {
+      if (!isNum(value)) return "—";
+      return value.toLocaleString("zh-CN");
+    }
+
+    /** 单条事件：收起是一行摘要，点开列出簇内各源标题与原文链接。 */
+    function NewsEventRow(props) {
+      var event = props.event || {};
+      var important = isNum(event.importance) && event.importance >= 70;
+      var sourceCount = isNum(event.sourceCount) ? event.sourceCount : 0;
+      var sources = Array.isArray(event.sources) ? event.sources.slice(0, 8) : [];
+      var tickers = Array.isArray(event.tickers) ? event.tickers.slice(0, 6) : [];
+      var stopClick = function (clickEvent) {
+        if (clickEvent && clickEvent.stopPropagation) clickEvent.stopPropagation();
+      };
+
+      var head = h(
+        "div",
+        { style: { display: "flex", alignItems: "flex-start", gap: 8, padding: "8px 0 4px" } },
+        h(
+          "span",
+          {
+            "data-wallstreet-news-time": "",
+            title: event.timeUnknown === true ? "上游只提供日期，没有时分" : "",
+            style: {
+              width: 64,
+              flexShrink: 0,
+              paddingTop: 2,
+              fontSize: 11.5,
+              color: COLORS.faint,
+              fontFamily: NUM_FONT,
+              fontVariantNumeric: "tabular-nums",
+              whiteSpace: "nowrap",
+            },
+          },
+          hubTimeText(event.ts, event.timeUnknown === true),
+        ),
+        important
+          ? h("span", {
+              title: hubImportanceDetail(event),
+              style: { width: 6, height: 6, borderRadius: 3, background: COLORS.up, marginTop: 7, flexShrink: 0 },
+            })
+          : null,
+        h(
+          "span",
+          {
+            style: {
+              flex: 1,
+              minWidth: 0,
+              fontSize: 12.5,
+              lineHeight: 1.65,
+              fontWeight: important ? 600 : 500,
+              color: important ? COLORS.up : "inherit",
+              wordBreak: "break-word",
+            },
+          },
+          event.title || "（无标题）",
+        ),
+        sourceCount > 1 ? h(Tag, null, sourceCount + " 家") : null,
+        event.eventType ? h(Tag, null, event.eventType) : h(Tag, null, hubKindLabel(event.kind)),
+      );
+
+      // 个股 chips 之后接板块 chips（最多 2 个），样式与个股 chip 一致，外层包一层锚点便于验收。
+      var sectors = Array.isArray(event.sectors) ? event.sectors.slice(0, 2) : [];
+      var chipNodes = tickers
+        .map(function (ticker, index) {
+          return h(Tag, { key: "ticker-" + index }, ticker);
+        })
+        .concat(
+          sectors.map(function (sector, index) {
+            return h(
+              "span",
+              { key: "sector-" + index, "data-wallstreet-news-sector-chip": sector },
+              h(Tag, null, sector),
+            );
+          }),
+        );
+      // AI 摘要：只对高分事件生成，没生成过就不占位（不显示空壳）。
+      var llm = event.llm && event.llm.summary ? event.llm : null;
+      var aiLine = llm
+        ? h(
+            "div",
+            {
+              "data-wallstreet-news-ai": event.id || "",
+              style: {
+                display: "flex",
+                alignItems: "baseline",
+                gap: 6,
+                margin: "0 0 2px 60px",
+                fontSize: 12,
+                lineHeight: 1.6,
+                color: COLORS.muted,
+              },
+            },
+            h(
+              "span",
+              {
+                title: llm.model ? "模型 " + llm.model : "AI 摘要",
+                style: {
+                  flexShrink: 0,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 0.4,
+                  padding: "0 4px",
+                  borderRadius: 3,
+                  border: "1px solid " + COLORS.border,
+                  color: hubSentimentColor(llm.sentiment),
+                },
+              },
+              "AI",
+            ),
+            h("span", { style: { color: hubSentimentColor(llm.sentiment), flexShrink: 0 } }, llm.sentiment || "中性"),
+            h("span", { style: { minWidth: 0, wordBreak: "break-word" } }, llm.summary),
+          )
+        : null;
+
+      var chipLine = chipNodes.length
+        ? h(
+            "div",
+            {
+              "data-wallstreet-news-chips": "",
+              style: { display: "flex", gap: 4, flexWrap: "wrap", paddingLeft: 60, paddingBottom: 6 },
+            },
+            chipNodes,
+          )
+        : null;
+
+      var detail = null;
+      if (props.expanded) {
+        detail = h(
+          "div",
+          {
+            style: {
+              margin: "0 0 8px 60px",
+              paddingLeft: 10,
+              borderLeft: "2px solid " + COLORS.border,
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+            },
+          },
+          sources.length
+            ? sources.map(function (source, index) {
+                var title = source.title || "（无标题）";
+                return h(
+                  "div",
+                  {
+                    key: "source-" + index,
+                    style: { display: "flex", alignItems: "baseline", gap: 6, fontSize: 12, lineHeight: 1.6 },
+                  },
+                  h(Tag, null, source.label || source.source || "来源"),
+                  source.url
+                    ? h(
+                        "a",
+                        {
+                          href: source.url,
+                          target: "_blank",
+                          rel: "noopener noreferrer",
+                          onClick: stopClick,
+                          style: {
+                            color: "inherit",
+                            textDecoration: "underline dotted",
+                            textDecorationColor: COLORS.faint,
+                            textUnderlineOffset: 2,
+                            minWidth: 0,
+                            wordBreak: "break-word",
+                          },
+                        },
+                        title,
+                      )
+                    : h("span", { style: { color: COLORS.muted, minWidth: 0 } }, title),
+                  h("span", { style: { flex: 1 } }),
+                  h(
+                    "span",
+                    { style: { color: COLORS.faint, fontSize: 11, fontFamily: NUM_FONT, whiteSpace: "nowrap" } },
+                    hubTimeText(source.ts),
+                  ),
+                );
+              })
+            : h("div", { style: { fontSize: 12, color: COLORS.muted } }, "簇内没有可用的源明细"),
+          event.url
+            ? h(
+                "a",
+                {
+                  href: event.url,
+                  target: "_blank",
+                  rel: "noopener noreferrer",
+                  onClick: stopClick,
+                  style: { fontSize: 11.5, color: COLORS.muted, textDecoration: "none", paddingTop: 2 },
+                },
+                "打开原文 →",
+              )
+            : null,
+        );
+      }
+
+      return h(
+        "div",
+        {
+          "data-wallstreet-news-event": event.id || "",
+          "data-wallstreet-news-expanded": props.expanded ? "1" : "0",
+          onClick: function () {
+            if (props.onToggle) props.onToggle();
+          },
+          style: { borderBottom: "1px solid " + COLORS.border, cursor: "pointer" },
+        },
+        head,
+        aiLine,
+        chipLine,
+        detail,
+      );
+    }
+
+    /**
+     * 「今日头版」：一屏回答「今天最值得看什么 / 哪个板块热 / 我关注的票有没有消息 / 一共多少量」。
+     * 数据来自 `/hub/frontpage`，全部规则可算，不调模型。
+     */
+    function HubFrontpage(props) {
+      var page = props.data;
+      if (!page) {
+        return props.error
+          ? h("div", { style: { fontSize: 12, color: COLORS.muted } }, "头版暂不可用：" + props.error)
+          : null;
+      }
+      var counts = page.counts || {};
+      var highlights = Array.isArray(page.highlights) ? page.highlights : [];
+      var sectors = Array.isArray(page.sectors) ? page.sectors : [];
+      var watch = Array.isArray(page.watch) ? page.watch : [];
+
+      var statLine = [
+        isNum(counts.events) ? counts.events + " 条事件" : null,
+        isNum(counts.multiSource) ? counts.multiSource + " 条多源" : null,
+        isNum(counts.summarized) ? counts.summarized + " 条有 AI 摘要" : null,
+        isNum(counts.sources) ? counts.sources + " 个源" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+
+      var renderItem = function (item, index, extra) {
+        var important = isNum(item.importance) && item.importance >= 70;
+        return h(
+          "div",
+          {
+            key: "fp-" + (item.id || index),
+            "data-wallstreet-frontpage-item": item.id || "",
+            style: { padding: "5px 0", borderTop: index === 0 ? "none" : "1px solid " + COLORS.border },
+          },
+          h(
+            "div",
+            { style: { display: "flex", alignItems: "baseline", gap: 8 } },
+            h(
+              "span",
+              {
+                style: {
+                  flexShrink: 0,
+                  fontSize: 11,
+                  fontFamily: NUM_FONT,
+                  color: important ? COLORS.up : COLORS.faint,
+                  fontWeight: important ? 700 : 400,
+                  width: 26,
+                },
+              },
+              isNum(item.importance) ? item.importance : "—",
+            ),
+            h(
+              "span",
+              {
+                style: {
+                  flex: 1,
+                  minWidth: 0,
+                  fontSize: 12.5,
+                  lineHeight: 1.6,
+                  fontWeight: important ? 600 : 500,
+                  color: important ? COLORS.up : "inherit",
+                  wordBreak: "break-word",
+                },
+              },
+              item.title || "（无标题）",
+            ),
+            isNum(item.sourceCount) && item.sourceCount > 1 ? h(Tag, null, item.sourceCount + " 家") : null,
+            item.eventType ? h(Tag, null, item.eventType) : null,
+          ),
+          item.ai
+            ? h(
+                "div",
+                { style: { fontSize: 11.5, color: COLORS.muted, paddingLeft: 34, lineHeight: 1.5 } },
+                "AI " + (item.ai.sentiment || "中性") + " " + item.ai.summary,
+              )
+            : null,
+          item.tickers && item.tickers.length
+            ? h(
+                "div",
+                { style: { display: "flex", gap: 4, flexWrap: "wrap", paddingLeft: 34, paddingTop: 2 } },
+                item.tickers.slice(0, 4).map(function (code, codeIndex) {
+                  return h(Tag, { key: "fp-t-" + index + "-" + codeIndex }, code);
+                }),
+                extra ? h(Tag, { key: "fp-w-" + index }, extra) : null,
+              )
+            : null,
+        );
+      };
+
+      return h(
+        "div",
+        {
+          "data-wallstreet-frontpage": "",
+          style: {
+            border: "1px solid " + COLORS.border,
+            borderRadius: 12,
+            padding: "10px 14px",
+            background: "color-mix(in srgb, currentColor 2.5%, transparent)",
+          },
+        },
+        h(
+          "div",
+          { style: { display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", paddingBottom: 4 } },
+          h("span", { style: { fontSize: 13, fontWeight: 700, letterSpacing: 0.2 } }, "今日头版"),
+          h("span", { style: { fontSize: 11.5, color: COLORS.faint, fontFamily: NUM_FONT } }, page.date || ""),
+          h("span", { style: { flex: 1 } }),
+          h("span", { style: { fontSize: 11.5, color: COLORS.muted } }, statLine),
+          props.onRefresh
+            ? h(
+                ToolbarButton,
+                { action: "frontpage-refresh", onClick: props.onRefresh, title: "重新读取头版" },
+                props.refreshing ? "刷新中…" : "刷新头版",
+              )
+            : null,
+          props.onDigest
+            ? h(
+                ToolbarButton,
+                { action: "frontpage-digest", onClick: props.onDigest, title: "把今天导出成一份 Markdown 日报" },
+                props.digesting ? "导出中…" : "导出日报",
+              )
+            : null,
+          props.onPublish
+            ? h(
+                ToolbarButton,
+                { action: "frontpage-publish", onClick: props.onPublish, title: "把当天日报投喂进知识库（dsh-kb）" },
+                props.publishing ? "发布中…" : "发到知识库",
+              )
+            : null,
+          h(ToolbarButton, { action: "frontpage-toggle", onClick: props.onToggle }, props.collapsed ? "展开" : "收起"),
+        ),
+        props.digestMessage
+          ? h("div", { style: { fontSize: 11.5, color: COLORS.muted, paddingBottom: 4 } }, props.digestMessage)
+          : null,
+        props.collapsed
+          ? null
+          : h(
+              "div",
+              { style: { display: "grid", gridTemplateColumns: props.compact ? "minmax(0, 1fr)" : "minmax(0, 1.55fr) minmax(0, 1fr)", gap: 16 } },
+              h(
+                "div",
+                null,
+                h("div", { style: { fontSize: 11, color: COLORS.faint, paddingBottom: 2 } }, "今日要闻"),
+                highlights.length
+                  ? highlights.map(function (item, index) {
+                      return renderItem(item, index, null);
+                    })
+                  : h("div", { style: { fontSize: 12, color: COLORS.muted, padding: "4px 0" } }, "今天还没有够格的要闻"),
+              ),
+              h(
+                "div",
+                null,
+                h("div", { style: { fontSize: 11, color: COLORS.faint, paddingBottom: 4 } }, "板块热度"),
+                sectors.length
+                  ? h(
+                      "div",
+                      { style: { display: "flex", flexDirection: "column", gap: 3 } },
+                      sectors.map(function (sector, index) {
+                        return h(
+                          "div",
+                          { key: "fp-sec-" + index, style: { display: "flex", alignItems: "baseline", gap: 8, fontSize: 12 } },
+                          h("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, sector.name),
+                          h("span", { style: { color: COLORS.muted, fontSize: 11, fontFamily: NUM_FONT } }, sector.events + " 条"),
+                          isNum(sector.importance)
+                            ? h("span", { style: { color: COLORS.faint, fontSize: 11, fontFamily: NUM_FONT } }, "最高 " + sector.importance)
+                            : null,
+                        );
+                      }),
+                    )
+                  : h("div", { style: { fontSize: 12, color: COLORS.muted } }, "还没有板块热度"),
+                h(
+                  "div",
+                  { style: { fontSize: 11, color: COLORS.faint, padding: "10px 0 4px" } },
+                  watch.length ? "我关注的票（" + watch.length + "）" : "我关注的票",
+                ),
+                watch.length
+                  ? h(
+                      "div",
+                      { style: { display: "flex", flexDirection: "column", gap: 4 } },
+                      watch.map(function (item, index) {
+                        return h(
+                          "div",
+                          { key: "fp-watch-" + index, style: { fontSize: 12, lineHeight: 1.55 } },
+                          h(Tag, null, item.watchedTicker || ""),
+                          " ",
+                          h("span", { style: { wordBreak: "break-word" } }, item.title || ""),
+                        );
+                      }),
+                    )
+                  : h(
+                      "div",
+                      { style: { fontSize: 12, color: COLORS.muted } },
+                      isNum(page.watchedCount) && page.watchedCount > 0 ? "今天关注的票没有新消息" : "没有持仓快照，无法判断",
+                    ),
+              ),
+            ),
+      );
+    }
+
+    /** 可选的抓取间隔（毫秒 → 面板文案）。和后端 config.js 的夹紧区间一致。 */
+    var HUB_INTERVALS = [60000, 120000, 300000, 600000, 1800000];
+
+    function hubIntervalLabel(ms) {
+      var minutes = Math.round((isNum(ms) ? ms : 0) / 60000);
+      if (minutes >= 60) return minutes / 60 + " 小时";
+      return minutes + " 分钟";
+    }
+
+    /**
+     * 源配置卡：逐源开关 + 抓取间隔，保存到 `data/hub-settings.json`。
+     * 只提交**改过的**源（draft 里有的），没动过的继续走适配器默认值。
+     */
+    function HubSourceConfig(props) {
+      var sources = Array.isArray(props.data && props.data.sources) ? props.data.sources : [];
+      var draft = props.draft || {};
+      // 摘要模型：从 DSH 模型列表里选一个并记住；不可用只展示，不降级。
+      var modelInfo = (props.data && props.data.model) || null;
+      var modelSelected = (modelInfo && modelInfo.selected) || null;
+      var modelProviders = (modelInfo && modelInfo.providers) || [];
+      var modelValueOf = function (sel) {
+        return sel ? sel.provider + "::" + sel.model : "";
+      };
+      var modelState = react.useState(modelValueOf(modelSelected));
+      var modelValue = modelState[0];
+      var setModelValue = modelState[1];
+      react.useEffect(
+        function () {
+          setModelValue(modelValueOf(modelSelected));
+        },
+        [modelInfo]
+      );
+      var modelOptions = [{ value: "", label: "跟随 DSH 默认模型" }];
+      modelProviders.forEach(function (provider) {
+        (provider.models || []).forEach(function (model) {
+          modelOptions.push({
+            value: provider.id + "::" + model.id,
+            label: (provider.name || provider.id) + " · " + (model.name || model.id),
+          });
+        });
+      });
+      var modelAvailable = modelInfo ? modelInfo.available !== false : true;
+      var modelRow = h(
+        "div",
+        {
+          "data-wallstreet-hub-model": "",
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            padding: "7px 0",
+            borderBottom: "1px solid " + COLORS.border,
+            fontSize: 11.5,
+          },
+        },
+        h("span", { style: { fontWeight: 600 } }, "AI 模型"),
+        h(
+          "select",
+          {
+            "data-wallstreet-hub-model-select": "",
+            value: modelValue,
+            disabled: modelProviders.length === 0,
+            onChange: function (event) {
+              setModelValue(event.target.value);
+            },
+            style: {
+              font: "inherit",
+              fontSize: 11.5,
+              padding: "3px 6px",
+              borderRadius: 6,
+              border: "1px solid " + COLORS.border,
+              background: COLORS.chip,
+              maxWidth: 300,
+            },
+          },
+          modelOptions.map(function (option) {
+            return h("option", { key: option.value, value: option.value }, option.label);
+          })
+        ),
+        h(
+          ToolbarButton,
+          {
+            action: "hub-model-save",
+            onClick: function () {
+              var parts = String(modelValue || "").split("::");
+              if (props.onModelSave) props.onModelSave(parts[0] || "", parts[1] || "");
+            },
+          },
+          "记住"
+        ),
+        h(
+          "span",
+          {
+            style: { color: modelAvailable ? COLORS.muted : COLORS.down, fontSize: 11 },
+          },
+          modelInfo
+            ? modelAvailable
+              ? modelSelected
+                ? "可用"
+                : "跟随 DSH 默认"
+              : "不可用：" + (modelInfo.reason || modelSelected.provider + "/" + modelSelected.model)
+            : "读取中…"
+        )
+      );
+      var rows = sources.map(function (source) {
+        var entry = Object.assign({}, source, draft[source.id] || {});
+        var on = entry.enabled !== false;
+        var changed = Boolean(draft[source.id]);
+        return h(
+          "div",
+          {
+            key: source.id,
+            "data-wallstreet-source-config": source.id,
+            style: {
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.4fr) 56px 74px 96px minmax(0, 1fr)",
+              gap: 8,
+              alignItems: "center",
+              padding: "5px 0",
+              borderTop: "1px solid " + COLORS.border,
+              fontSize: 12,
+              opacity: on ? 1 : 0.55,
+            },
+          },
+          h("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, source.label),
+          h("span", { style: { fontSize: 10.5, color: COLORS.faint } }, hubKindLabel(source.kind)),
+          h(
+            "button",
+            {
+              type: "button",
+              "data-wallstreet-source-toggle": source.id,
+              onClick: function () {
+                if (props.onToggle) props.onToggle(source.id, !on);
+              },
+              style: {
+                font: "inherit",
+                fontSize: 11.5,
+                padding: "2px 0",
+                borderRadius: 999,
+                border: "1px solid " + COLORS.border,
+                background: on ? COLORS.chip : "transparent",
+                color: on ? "inherit" : COLORS.muted,
+                cursor: "pointer",
+              },
+            },
+            on ? "启用" : "停用",
+          ),
+          h(
+            "select",
+            {
+              "data-wallstreet-source-interval": source.id,
+              value: String(entry.intervalMs),
+              disabled: !on,
+              onChange: function (event) {
+                if (props.onInterval) props.onInterval(source.id, Number(event.target.value));
+              },
+              style: {
+                font: "inherit",
+                fontSize: 11.5,
+                padding: "2px 4px",
+                borderRadius: 6,
+                border: "1px solid " + COLORS.border,
+                background: "transparent",
+                color: "inherit",
+              },
+            },
+            // 选项要包含这条源**当前的**间隔：有些源默认 1 小时，不在固定选项里，
+            // 不补进来的话 select 会回落到第一项，显示成「1 分钟」。
+            (function () {
+              var options = HUB_INTERVALS.slice();
+              if (isNum(entry.intervalMs) && options.indexOf(entry.intervalMs) < 0) options.push(entry.intervalMs);
+              options.sort(function (a, b) {
+                return a - b;
+              });
+              return options.map(function (ms) {
+                return h("option", { key: ms, value: String(ms) }, hubIntervalLabel(ms));
+              });
+            })(),
+          ),
+          h(
+            "span",
+            { style: { fontSize: 11, color: COLORS.faint, whiteSpace: "nowrap" } },
+            changed ? "已改（未保存）" : source.overridden ? "自定义" : "默认 " + hubIntervalLabel(source.defaultIntervalMs),
+          ),
+        );
+      });
+
+      var changedCount = Object.keys(draft).length;
+      return h(
+        "div",
+        {
+          "data-wallstreet-source-config-card": "",
+          style: {
+            border: "1px solid " + COLORS.border,
+            borderRadius: 12,
+            padding: "10px 14px",
+            background: "color-mix(in srgb, currentColor 2.5%, transparent)",
+          },
+        },
+        h(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingBottom: 6 } },
+          h("span", { style: { fontSize: 12.5, fontWeight: 600 } }, "源配置"),
+          h(
+            "span",
+            { style: { fontSize: 11, color: COLORS.faint } },
+            changedCount > 0 ? changedCount + " 条改动待保存" : "改开关或间隔后点保存，下一轮入站生效",
+          ),
+          h("span", { style: { flex: 1 } }),
+          props.saving
+            ? h("span", { style: { fontSize: 11.5, color: COLORS.muted } }, "保存中…")
+            : h(
+                ToolbarButton,
+                { action: "hub-config-save", onClick: props.onSave, primary: true },
+                "保存",
+              ),
+          h(ToolbarButton, { action: "hub-config-cancel", onClick: props.onClose }, "收起"),
+        ),
+        modelRow,
+        props.message
+          ? h("div", { style: { fontSize: 11.5, color: /失败|不/.test(props.message) ? COLORS.down : COLORS.muted, paddingBottom: 4 } }, props.message)
+          : null,
+        rows.length ? rows : h("div", { style: { fontSize: 12.5, color: COLORS.muted, padding: "6px 0" } }, "没有可配置的源"),
+        props.data && props.data.configPath
+          ? h(
+              "div",
+              { style: { fontSize: 10.5, color: COLORS.faint, paddingTop: 6 } },
+              "配置文件：" + props.data.configPath,
+            )
+          : null,
+      );
+    }
+
+    /**
+     * AI 模型条：常驻在资讯页顶部，不藏在「配置源」里。
+     * 数据来自 /hub/model（DSH 模型列表 + 当前选择 + 可用性）；不可用只展示，不降级。
+     */
+    function HubModelBar() {
+      var state = react.useState({ loading: true, data: null, saving: false, message: "" });
+      var info = state[0];
+      var setInfo = state[1];
+      var load = function () {
+        hubFetch("/hub/model")
+          .then(function (body) {
+            setInfo({ loading: false, data: body, saving: false, message: "" });
+          })
+          .catch(function (error) {
+            setInfo({ loading: false, data: null, saving: false, message: hubErrorText(error) });
+          });
+      };
+      react.useEffect(function () {
+        load();
+      }, []);
+      var providers = (info.data && info.data.providers) || [];
+      var selected = (info.data && info.data.selected) || null;
+      var current = selected ? selected.provider + "::" + selected.model : "";
+      var available = info.data ? info.data.available !== false : true;
+      var options = [{ value: "", label: "跟随 DSH 默认模型" }];
+      providers.forEach(function (provider) {
+        (provider.models || []).forEach(function (model) {
+          options.push({
+            value: provider.id + "::" + model.id,
+            label: (provider.name || provider.id) + " · " + (model.name || model.id),
+          });
+        });
+      });
+      var save = function (value) {
+        setInfo(function (previous) {
+          return Object.assign({}, previous, { saving: true, message: "" });
+        });
+        var parts = String(value || "").split("::");
+        hubFetch("/hub/model", {
+          method: "POST",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: JSON.stringify({ provider: parts[0] || "", model: parts[1] || "" }),
+        })
+          .then(function (body) {
+            if (!body.ok) {
+              setInfo(function (previous) {
+                return Object.assign({}, previous, { saving: false, message: body.error || "保存失败" });
+              });
+              return;
+            }
+            load();
+          })
+          .catch(function (error) {
+            setInfo(function (previous) {
+              return Object.assign({}, previous, { saving: false, message: hubErrorText(error) });
+            });
+          });
+      };
+      var statusText = !info.data
+        ? (info.loading ? "读取中…" : info.message || "模型信息不可用")
+        : available
+          ? selected
+            ? "可用"
+            : "跟随 DSH 默认"
+          : "不可用：" + (info.data.reason || (selected ? selected.provider + "/" + selected.model : ""));
+      return h(
+        "div",
+        {
+          "data-wallstreet-hub-model-bar": "",
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            fontSize: 11.5,
+            padding: "2px 0 6px",
+          },
+        },
+        h("span", { style: { fontWeight: 600 } }, "AI 模型"),
+        h(
+          "select",
+          {
+            "data-wallstreet-hub-model-select": "",
+            value: current,
+            disabled: providers.length === 0,
+            onChange: function (event) {
+              save(event.target.value);
+            },
+            title: "摘要与研究的模型；从 DSH 模型列表选择，选完立即记住",
+            style: {
+              font: "inherit",
+              fontSize: 11.5,
+              padding: "3px 6px",
+              borderRadius: 6,
+              border: "1px solid " + COLORS.border,
+              background: COLORS.chip,
+              maxWidth: 300,
+            },
+          },
+          options.map(function (option) {
+            return h("option", { key: option.value, value: option.value }, option.label);
+          })
+        ),
+        h(
+          "span",
+          { style: { color: available ? COLORS.faint : COLORS.down, fontSize: 11 } },
+          statusText
+        ),
+        info.saving ? h("span", { style: { fontSize: 11, color: COLORS.muted } }, "保存中…") : null,
+        info.message ? h("span", { style: { fontSize: 11, color: COLORS.down } }, info.message) : null
+      );
+    }
+
+    /**
+     * 源健康度卡：`/hub/stats` 的 `bySource` 逐行展示（源名 / 入库条数 / 最近成功 / 最近失败）。
+     * 时间戳是 epoch ms（不是 ISO），所以走 hubStampText 而不是 timeText。
+     */
+    function HubSourceHealth(props) {
+      var body = props.body;
+      var bySource = body && Array.isArray(body.bySource) ? body.bySource : [];
+      // 成分股缓存：徽标显示「精确 / 关键词」口径的直接原因，放一行让用户看得见。
+      var membership = body && body.membership ? body.membership : null;
+      var membershipNote = null;
+      if (membership && isNum(membership.boardsWithMembers)) {
+        membershipNote =
+          "成分股 " +
+          membership.boardsWithMembers +
+          " 个板块" +
+          (isNum(membership.memberCodes) ? " / " + membership.memberCodes + " 只" : "") +
+          (isNum(membership.pending) && membership.pending > 0 ? " · 待补 " + membership.pending : "");
+      }
+      var failedCount = 0;
+      var header = h(
+        "div",
+        {
+          style: {
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.1fr) 64px 92px minmax(0, 1.5fr)",
+            gap: 8,
+            fontSize: 11,
+            color: COLORS.faint,
+            padding: "0 0 4px",
+          },
+        },
+        h("span", null, "数据源"),
+        h("span", { style: { textAlign: "right" } }, "入库条数"),
+        h("span", null, "最近成功"),
+        h("span", null, "最近失败"),
+      );
+      var rows = bySource.map(function (source) {
+        var failed = !!source.lastError;
+        if (failed) failedCount += 1;
+        return h(
+          "div",
+          {
+            key: source.id || source.label,
+            "data-wallstreet-source-health": source.id || source.label || "",
+            style: {
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.1fr) 64px 92px minmax(0, 1.5fr)",
+              gap: 8,
+              alignItems: "baseline",
+              fontSize: 12,
+              padding: "3px 0",
+              borderTop: "1px solid " + COLORS.border,
+            },
+          },
+          h(
+            "span",
+            { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+            h("span", { style: { color: COLORS.muted, fontSize: 11, marginRight: 5 } }, source.id || ""),
+            source.label || source.id || "未知源",
+          ),
+          h(
+            "span",
+            {
+              style: {
+                textAlign: "right",
+                fontFamily: NUM_FONT,
+                fontVariantNumeric: "tabular-nums",
+                color: isNum(source.count) && source.count > 0 ? "inherit" : COLORS.faint,
+              },
+            },
+            hubCountText(source.count),
+          ),
+          h(
+            "span",
+            {
+              title: source.lastOk ? new Date(source.lastOk).toLocaleString("zh-CN", { hour12: false }) : "从未成功",
+              style: { fontFamily: NUM_FONT, fontSize: 11.5, color: COLORS.muted, whiteSpace: "nowrap" },
+            },
+            hubStampText(source.lastOk),
+          ),
+          failed
+            ? h(
+                "span",
+                {
+                  title: String(source.lastError || ""),
+                  style: {
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    color: COLORS.down,
+                    fontSize: 11.5,
+                  },
+                },
+                source.lastError + (isNum(source.lastErrorAt) && source.lastErrorAt > 0 ? " · " + hubStampText(source.lastErrorAt) : ""),
+              )
+            : h("span", { style: { color: COLORS.faint, fontSize: 11.5 } }, "—"),
+        );
+      });
+
+      var head = h(
+        "div",
+        { style: { display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 } },
+        h("span", { style: { fontSize: 12.5, fontWeight: 600 } }, "数据源健康度"),
+        h(
+          "span",
+          { style: { fontSize: 11.5, color: COLORS.muted } },
+          bySource.length ? "共 " + bySource.length + " 个源" + (failedCount ? " · " + failedCount + " 个最近失败" : " · 全部正常") : "",
+        ),
+        membershipNote ? h("span", { style: { fontSize: 11.5, color: COLORS.faint } }, membershipNote) : null,
+        h("span", { style: { flex: 1 } }),
+        props.loading ? h("span", { style: { fontSize: 11.5, color: COLORS.faint } }, "读取中…") : null,
+        props.onConfig
+          ? h(
+              "button",
+              {
+                type: "button",
+                "data-wallstreet-source-config-open": "",
+                onClick: props.onConfig,
+                style: {
+                  font: "inherit",
+                  fontSize: 11.5,
+                  padding: "2px 9px",
+                  borderRadius: 999,
+                  border: "1px solid " + COLORS.border,
+                  background: props.configOpen ? COLORS.chip : "transparent",
+                  color: "inherit",
+                  cursor: "pointer",
+                },
+              },
+              props.configOpen ? "收起配置" : "配置源",
+            )
+          : null,
+      );
+
+      var content;
+      if (props.error) {
+        content = h(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "2px 0" } },
+          h("span", { style: { fontSize: 12.5, color: COLORS.down } }, "源状态读取失败"),
+          props.errorDetail ? h("span", { style: { fontSize: 11.5, color: COLORS.muted } }, props.errorDetail) : null,
+          h(
+            ToolbarButton,
+            { action: "hub-sources-retry", onClick: props.onRetry, title: "重新读取源状态" },
+            "重试",
+          ),
+        );
+      } else if (!bySource.length) {
+        content = h("div", { style: { fontSize: 12.5, color: COLORS.muted } }, props.loading ? "正在读取源状态…" : "还没有源运行记录");
+      } else {
+        content = h("div", null, header, rows);
+      }
+
+      return h(
+        "div",
+        {
+          "data-wallstreet-source-health-card": "",
+          style: {
+            border: "1px solid " + COLORS.border,
+            borderRadius: 12,
+            padding: "10px 14px",
+            background: "color-mix(in srgb, currentColor 2.5%, transparent)",
+          },
+        },
+        head,
+        content,
+      );
+    }
+
+    /**
+     * 资讯 view：多源抓取 → 归一化 → 聚簇后的事件流，数据全部来自 `/wallstreet/api/hub/*`。
+     * 60s 轮询，页面隐藏时暂停；后端没部署时只显示错误态，不白屏、不抛未捕获异常。
+     */
+    function NewsHub(props) {
+      var filterState = react.useState(function () {
+        // 从盘面点板块进资讯时，板块名 + 板块代码一起作为初始筛选：
+        // 有 code 后端能直接按成分股精确过滤，没有就退回关键词。
+        return {
+          kind: "",
+          q: "",
+          ticker: "",
+          sector: props.initialSector || "",
+          sectorCode: props.initialSectorCode || "",
+        };
+      });
+      var filters = filterState[0];
+      var setFilters = filterState[1];
+      var feedState = react.useState({ loading: true, data: null, error: "" });
+      var feed = feedState[0];
+      var setFeed = feedState[1];
+      var syncState = react.useState({ running: false, message: "", error: "" });
+      var sync = syncState[0];
+      var setSync = syncState[1];
+      var expandedState = react.useState("");
+      var expanded = expandedState[0];
+      var setExpanded = expandedState[1];
+      var healthState = react.useState({ open: false, loading: false, data: null, error: "", errorDetail: "" });
+      var configState = react.useState({ open: false, loading: false, data: null, error: "", draft: {}, saving: false, message: "" });
+      var health = healthState[0];
+      var setHealth = healthState[1];
+      var frontpageState = react.useState({ collapsed: false, loading: false, data: null, error: "", digesting: false, digestMessage: "" });
+      var frontpage = frontpageState[0];
+      var setFrontpage = frontpageState[1];
+      var sourceConfigState = configState;
+      var sourceConfig = sourceConfigState[0];
+      var setSourceConfig = sourceConfigState[1];
+      var filtersRef = react.useRef(filters);
+      filtersRef.current = filters;
+      var aliveRef = react.useRef(true);
+      var requestRef = react.useRef(0);
+      var debounceRef = react.useRef(0);
+      var healthRequestRef = react.useRef(0);
+      var healthOpenRef = react.useRef(false);
+      healthOpenRef.current = !!health.open;
+      // 记下已经应用过的盘面板块 seq：同一个板块重复点（seq 变）时也要重新应用一次。
+      var sectorSeqRef = react.useRef(props.initialSector ? (isNum(props.initialSectorSeq) ? props.initialSectorSeq : 0) : -1);
+      var onMetaRef = react.useRef(props.onMeta);
+      onMetaRef.current = props.onMeta;
+      var onClearInitialSectorRef = react.useRef(props.onClearInitialSector);
+      onClearInitialSectorRef.current = props.onClearInitialSector;
+
+      var load = react.useCallback(function (next) {
+        var current = next || filtersRef.current;
+        var seq = ++requestRef.current;
+        var params = ["limit=60"];
+        if (current.kind) params.push("kind=" + encodeURIComponent(current.kind));
+        if (current.q && current.q.trim()) params.push("q=" + encodeURIComponent(current.q.trim()));
+        if (current.ticker && current.ticker.trim()) params.push("ticker=" + encodeURIComponent(current.ticker.trim()));
+        if (current.sector && current.sector.trim()) params.push("sector=" + encodeURIComponent(current.sector.trim()));
+        if (current.sectorCode && /^BK\d+$/.test(String(current.sectorCode))) {
+          params.push("sectorCode=" + encodeURIComponent(String(current.sectorCode)));
+        }
+        setFeed(function (previous) {
+          // 只有首次（还没有数据）才切「加载中」；后台轮询静默刷新，别让工具栏按钮一直闪「刷新中…」。
+          return { loading: !previous.data, data: previous.data, error: "" };
+        });
+        hubFetch("/hub/feed?" + params.join("&"))
+          .then(function (body) {
+            if (!aliveRef.current || seq !== requestRef.current) return;
+            setFeed({ loading: false, data: body, error: "" });
+          })
+          .catch(function (error) {
+            if (!aliveRef.current || seq !== requestRef.current) return;
+            setFeed(function (previous) {
+              return { loading: false, data: previous.data, error: hubErrorText(error) };
+            });
+          });
+      }, []);
+
+      /** 自己写的最小防抖：筛选改动后 250ms 内只发一次请求（仍满足 300ms 内重拉）。 */
+      var scheduleLoad = function (next, delay) {
+        if (debounceRef.current) window.clearTimeout(debounceRef.current);
+        debounceRef.current = window.setTimeout(function () {
+          debounceRef.current = 0;
+          load(next);
+        }, delay);
+      };
+
+      react.useEffect(
+        function () {
+          aliveRef.current = true;
+          load();
+          loadFrontpage();
+          var timer = window.setInterval(function () {
+            // 页面隐藏时暂停轮询；切回前台后最多等一个周期就恢复。
+            if (document.visibilityState === "hidden") return;
+            load();
+          }, 60_000);
+          return function () {
+            aliveRef.current = false;
+            window.clearInterval(timer);
+            if (debounceRef.current) window.clearTimeout(debounceRef.current);
+            debounceRef.current = 0;
+          };
+        },
+        [load],
+      );
+
+      react.useEffect(
+        function () {
+          if (props.registerReload) {
+            props.registerReload(function () {
+              load();
+            });
+          }
+        },
+        [load],
+      );
+
+      /** 盘面点板块进来后，seq 变化时把板块名落到筛选上；首次挂载已由 useState 初始化，不重复拉。 */
+      react.useEffect(
+        function () {
+          var name = props.initialSector || "";
+          var seq = isNum(props.initialSectorSeq) ? props.initialSectorSeq : 0;
+          if (!name) return;
+          if (sectorSeqRef.current === seq) return;
+          sectorSeqRef.current = seq;
+          var next = Object.assign({}, filtersRef.current, { sector: name });
+          setFilters(next);
+          scheduleLoad(next, 0);
+        },
+        [props.initialSector, props.initialSectorSeq],
+      );
+
+      react.useEffect(
+        function () {
+          if (!onMetaRef.current) return;
+          var data = feed.data;
+          var stats = (data && data.stats) || {};
+          onMetaRef.current({
+            loading: !!feed.loading,
+            fetchedAt: data ? data.fetchedAt || "" : "",
+            lastIngestAt: stats.lastIngestAt || "",
+          });
+        },
+        [feed.loading, feed.data],
+      );
+
+      /** 源健康度：展开时读一次 `/hub/stats`；失败只落在卡片里，主列表照常。 */
+      /**
+       * 今日头版：挂载时取一次；点「刷新头版」或同步成功后重取。
+       * 失败静默（头版是锦上添花，不该挡住主列表）。
+       */
+      var loadFrontpage = function () {
+        setFrontpage(function (previous) {
+          return Object.assign({}, previous, { loading: true, error: "" });
+        });
+        hubFetch("/hub/frontpage")
+          .then(function (body) {
+            if (!aliveRef.current) return;
+            setFrontpage(function (previous) {
+              return Object.assign({}, previous, { loading: false, data: body.frontpage || null, error: "" });
+            });
+          })
+          .catch(function (error) {
+            if (!aliveRef.current) return;
+            setFrontpage(function (previous) {
+              return Object.assign({}, previous, { loading: false, error: hubErrorText(error) });
+            });
+          });
+      };
+
+      /**
+       * 导出当天日报：POST /hub/digest，后端写 data/digest/YYYY-MM-DD.md。
+       * 成功后把路径/大小回显在头版卡上，用户知道去哪儿找。
+       */
+      var exportDigest = function () {
+        setFrontpage(function (previous) {
+          return Object.assign({}, previous, { digesting: true, digestMessage: "" });
+        });
+        hubFetch("/hub/digest", {
+          method: "POST",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: "{}",
+        })
+          .then(function (body) {
+            if (!aliveRef.current) return;
+            var kb = body.bytes ? (body.bytes / 1024).toFixed(1) + " KB" : "";
+            setFrontpage(function (previous) {
+              return Object.assign({}, previous, {
+                digesting: false,
+                digestMessage: body.ok
+                  ? "日报已生成：" + body.path + (kb ? "（" + kb + "，" + body.events + " 条事件）" : "")
+                  : "日报生成失败：" + (body.error || "未知原因"),
+              });
+            });
+          })
+          .catch(function (error) {
+            if (!aliveRef.current) return;
+            setFrontpage(function (previous) {
+              return Object.assign({}, previous, { digesting: false, digestMessage: "日报生成失败：" + hubErrorText(error) });
+            });
+          });
+      };
+
+      /** 把当天日报投喂进知识库（后端调 scripts/kb/kb_publish.py，失败只回显不抛）。 */
+      var publishDigest = function () {
+        setFrontpage(function (previous) {
+          return Object.assign({}, previous, { publishing: true, digestMessage: "" });
+        });
+        hubFetch("/hub/digest", {
+          method: "POST",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: JSON.stringify({ publish: true }),
+        })
+          .then(function (body) {
+            if (!aliveRef.current) return;
+            var published = body.published || {};
+            setFrontpage(function (previous) {
+              return Object.assign({}, previous, {
+                publishing: false,
+                digestMessage: published.ok
+                  ? "已发布到知识库：" + (published.url || published.uid || "ok")
+                  : "发布失败：" + (published.error || "未知原因") + "（日报文件已生成：" + body.path + "）",
+              });
+            });
+          })
+          .catch(function (error) {
+            if (!aliveRef.current) return;
+            setFrontpage(function (previous) {
+              return Object.assign({}, previous, { publishing: false, digestMessage: "发布失败：" + hubErrorText(error) });
+            });
+          });
+      };
+
+      var loadHealth = function () {
+        var seq = ++healthRequestRef.current;
+        setHealth(function (previous) {
+          return { open: true, loading: !previous.data, data: previous.data, error: "", errorDetail: "" };
+        });
+        hubFetch("/hub/stats")
+          .then(function (body) {
+            if (!aliveRef.current || seq !== healthRequestRef.current) return;
+            setHealth({ open: true, loading: false, data: body, error: "", errorDetail: "" });
+          })
+          .catch(function (error) {
+            if (!aliveRef.current || seq !== healthRequestRef.current) return;
+            setHealth(function (previous) {
+              return {
+                open: true,
+                loading: false,
+                data: previous.data,
+                error: "源状态读取失败",
+                errorDetail: hubErrorText(error),
+              };
+            });
+          });
+      };
+
+      var toggleHealth = function () {
+        if (health.open) {
+          setHealth(function (previous) {
+            return Object.assign({}, previous, { open: false });
+          });
+          return;
+        }
+        loadHealth();
+      };
+
+      var runSync = function () {
+        if (sync.running) return;
+        if (debounceRef.current) {
+          window.clearTimeout(debounceRef.current);
+          debounceRef.current = 0;
+        }
+        setSync({ running: true, message: "", error: "" });
+        var controller = typeof AbortController === "function" ? new AbortController() : null;
+        var abortTimer = controller
+          ? window.setTimeout(function () {
+              controller.abort();
+            }, 45000)
+          : 0;
+        hubFetch("/hub/sync", { method: "POST", signal: controller ? controller.signal : undefined })
+          .then(function (body) {
+            if (abortTimer) window.clearTimeout(abortTimer);
+            if (!aliveRef.current) return;
+            var sources = Array.isArray(body.sources) ? body.sources : [];
+            var failed = sources.filter(function (source) {
+              return source && source.ok === false;
+            }).length;
+            setSync({
+              running: false,
+              message:
+                (isNum(body.ingested) ? "已入库 " + body.ingested + " 条" : "同步完成") +
+                (isNum(body.elapsedMs) ? " · " + (body.elapsedMs / 1000).toFixed(1) + "s" : "") +
+                (failed ? " · " + failed + " 个源失败" : ""),
+              error: "",
+            });
+            load();
+            // 卡片展开着就顺手刷新一次源健康度，否则用户看到的还是同步前的旧状态。
+            if (healthOpenRef.current) loadHealth();
+          })
+          .catch(function (error) {
+            if (abortTimer) window.clearTimeout(abortTimer);
+            if (!aliveRef.current) return;
+            var aborted = error && error.name === "AbortError";
+            setSync({
+              running: false,
+              message: "",
+              error: aborted ? "同步超时（45 秒），稍后再试" : hubErrorText(error),
+            });
+          });
+      };
+
+      var clearFilters = function () {
+        var next = { kind: "", q: "", ticker: "", sector: "", sectorCode: "" };
+        setFilters(next);
+        scheduleLoad(next, 0);
+        // 「来自盘面」的板块也是筛选的一部分，清除时一并把 Dashboard 侧的来源标记复位。
+        if (onClearInitialSectorRef.current) onClearInitialSectorRef.current();
+      };
+
+      /**
+       * 源配置：打开时读 `/hub/config`，改动进 draft，保存时只提交改过的源。
+       * 后端把覆盖值写进 `data/hub-settings.json`，下一轮入站自动应用（不用重载插件）。
+       */
+      var loadSourceConfig = function () {
+        setSourceConfig(function (previous) {
+          return Object.assign({}, previous, { open: true, loading: true, error: "", message: "" });
+        });
+        hubFetch("/hub/config")
+          .then(function (body) {
+            if (!aliveRef.current) return;
+            return hubFetch("/hub/model").then(
+              function (model) {
+                if (!aliveRef.current) return;
+                setSourceConfig({
+                  open: true,
+                  loading: false,
+                  data: Object.assign({}, body, { model: model }),
+                  error: body.error || "",
+                  draft: {},
+                  saving: false,
+                  message: "",
+                });
+              },
+              function () {
+                if (!aliveRef.current) return;
+                setSourceConfig({
+                  open: true,
+                  loading: false,
+                  data: body,
+                  error: body.error || "",
+                  draft: {},
+                  saving: false,
+                  message: "",
+                });
+              }
+            );
+          })
+          .catch(function (error) {
+            if (!aliveRef.current) return;
+            setSourceConfig(function (previous) {
+              return Object.assign({}, previous, { open: true, loading: false, error: hubErrorText(error) });
+            });
+          });
+      };
+
+      var editSourceDraft = function (id, patch) {
+        setSourceConfig(function (previous) {
+          var draft = Object.assign({}, previous.draft);
+          draft[id] = Object.assign({}, draft[id] || {}, patch);
+          return Object.assign({}, previous, { draft: draft, message: "" });
+        });
+      };
+
+      var saveModelSelection = function (provider, model) {
+        setSourceConfig(function (previous) {
+          return Object.assign({}, previous, { saving: true, message: "" });
+        });
+        hubFetch("/hub/model", {
+          method: "POST",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: JSON.stringify({ provider: provider, model: model }),
+        })
+          .then(function (body) {
+            if (!aliveRef.current) return;
+            if (!body.ok) {
+              setSourceConfig(function (previous) {
+                return Object.assign({}, previous, { saving: false, message: body.error || "保存失败" });
+              });
+              return;
+            }
+            setSourceConfig(function (previous) {
+              return Object.assign({}, previous, {
+                saving: false,
+                message: body.selected ? "模型已记住：" + body.selected.provider + "/" + body.selected.model : "已回到 DSH 默认模型",
+                data: Object.assign({}, previous.data, {
+                  model: Object.assign({}, body, { selected: body.selected || null }),
+                }),
+              });
+            });
+          })
+          .catch(function (error) {
+            if (!aliveRef.current) return;
+            setSourceConfig(function (previous) {
+              return Object.assign({}, previous, { saving: false, message: hubErrorText(error) });
+            });
+          });
+      };
+
+      var saveSourceConfig = function () {
+        var ids = Object.keys(sourceConfig.draft || {});
+        if (ids.length === 0) {
+          setSourceConfig(function (previous) {
+            return Object.assign({}, previous, { message: "没有改动" });
+          });
+          return;
+        }
+        var updates = ids.map(function (id) {
+          return Object.assign({ id: id }, sourceConfig.draft[id]);
+        });
+        setSourceConfig(function (previous) {
+          return Object.assign({}, previous, { saving: true, message: "" });
+        });
+        hubFetch("/hub/config", {
+          method: "POST",
+          headers: { accept: "application/json", "content-type": "application/json" },
+          body: JSON.stringify({ sources: updates }),
+        })
+          .then(function (body) {
+            if (!aliveRef.current) return;
+            setSourceConfig(function (previous) {
+              return Object.assign({}, previous, {
+                saving: false,
+                data: Object.assign({}, previous.data, { sources: body.sources || [] }),
+                draft: {},
+                message: "已保存 " + updates.length + " 条改动，下一轮入站生效",
+              });
+            });
+            loadHealth();
+            load();
+          })
+          .catch(function (error) {
+            if (!aliveRef.current) return;
+            setSourceConfig(function (previous) {
+              return Object.assign({}, previous, { saving: false, message: hubErrorText(error) });
+            });
+          });
+      };
+
+      var payload = feed.data;
+      var events = payload && Array.isArray(payload.events) ? payload.events : [];
+      var stats = (payload && payload.stats) || {};
+      var hasFilters = !!(
+        filters.kind ||
+        (filters.q && filters.q.trim()) ||
+        (filters.ticker && filters.ticker.trim()) ||
+        (filters.sector && filters.sector.trim())
+      );
+      // 「来自盘面」只在板块筛选仍然等于盘面带入的那一项时显示；用户手动改过就按普通筛选处理。
+      var originSector =
+        props.initialSector && filters.sector && String(filters.sector).trim() === String(props.initialSector).trim()
+          ? String(props.initialSector).trim()
+          : "";
+
+      // 契约 §6 的 stats 里没有「今日事件」；后端补了 todayEvents 就直读，否则按当前页事件现算并注明口径。
+      var todayCount = isNum(stats.todayEvents) ? stats.todayEvents : isNum(stats.eventsToday) ? stats.eventsToday : null;
+      var todayDerived = todayCount === null;
+      if (todayDerived) {
+        var startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        todayCount = 0;
+        for (var eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
+          if (isNum(events[eventIndex].ts) && events[eventIndex].ts >= startOfDay.getTime()) todayCount += 1;
+        }
+      }
+      var itemsSub = [];
+      if (isNum(stats.events)) itemsSub.push("事件 " + hubCountText(stats.events));
+      if (isNum(stats.sources)) itemsSub.push(stats.sources + " 个源");
+
+      var statBar = h(
+        "div",
+        {
+          "data-wallstreet-news-stats": "",
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 18,
+            flexWrap: "wrap",
+            border: "1px solid " + COLORS.border,
+            borderRadius: 12,
+            padding: "10px 14px",
+            background: "color-mix(in srgb, currentColor 2.5%, transparent)",
+          },
+        },
+        h(Stat, {
+          label: "今日事件",
+          value: hubCountText(todayCount),
+          sub: todayDerived ? "统计自当前页" : "全库",
+        }),
+        h(Stat, {
+          label: "入库条目",
+          value: hubCountText(stats.items),
+          sub: itemsSub.join(" · "),
+        }),
+        h(Stat, {
+          label: "最近同步",
+          value: stats.lastIngestAt ? timeText(stats.lastIngestAt).slice(0, 5) : "—",
+          sub: hubAgoText(stats.lastIngestAt),
+        }),
+        h("span", { style: { flex: 1 } }),
+        sync.message ? h("span", { style: { fontSize: 11.5, color: COLORS.muted } }, sync.message) : null,
+        h(
+          ToolbarButton,
+          {
+            action: "hub-sources",
+            onClick: toggleHealth,
+            title: health.open ? "收起源健康度" : "展开各数据源最近一次成功 / 失败",
+          },
+          "数据源 " + (isNum(stats.sources) ? stats.sources : "—") + (health.open ? " ▲" : " ▼"),
+        ),
+        h(
+          ToolbarButton,
+          { action: "hub-sync", primary: true, onClick: runSync, disabled: sync.running, title: "立即跑一轮入站抓取" },
+          sync.running ? "同步中…" : "立即同步",
+        ),
+      );
+
+      var healthCard = health.open
+        ? h(HubSourceHealth, {
+            body: health.data,
+            loading: !!health.loading,
+            error: health.error,
+            errorDetail: health.errorDetail,
+            onRetry: loadHealth,
+            onConfig: function () {
+              if (sourceConfig.open) {
+                setSourceConfig(function (previous) {
+                  return Object.assign({}, previous, { open: false });
+                });
+              } else {
+                loadSourceConfig();
+              }
+            },
+            configOpen: !!sourceConfig.open,
+          })
+        : null;
+
+      // 源配置卡：只在健康度卡展开且点了「配置源」时出现。
+      var sourceConfigCard = sourceConfig.open
+        ? h(HubSourceConfig, {
+            data: sourceConfig.data,
+            draft: sourceConfig.draft,
+            saving: !!sourceConfig.saving,
+            message: sourceConfig.message,
+            error: sourceConfig.error,
+            loading: !!sourceConfig.loading,
+            onToggle: function (id, enabled) {
+              editSourceDraft(id, { enabled: enabled });
+            },
+            onInterval: function (id, intervalMs) {
+              editSourceDraft(id, { intervalMs: intervalMs });
+            },
+            onSave: saveSourceConfig,
+            onModelSave: saveModelSelection,
+            onClose: function () {
+              setSourceConfig(function (previous) {
+                return Object.assign({}, previous, { open: false });
+              });
+            },
+          })
+        : null;
+
+      var filterRow = h(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+        originSector
+          ? h(
+              "button",
+              {
+                type: "button",
+                "data-wallstreet-news-sector-origin": originSector,
+                title: "清除盘面带入的板块筛选",
+                onClick: function () {
+                  var next = Object.assign({}, filters, { sector: "", sectorCode: "" });
+                  setFilters(next);
+                  scheduleLoad(next, 0);
+                  if (onClearInitialSectorRef.current) onClearInitialSectorRef.current();
+                },
+                style: {
+                  font: "inherit",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "3px 10px",
+                  borderRadius: 999,
+                  fontSize: 11.5,
+                  cursor: "pointer",
+                  border: "1px solid " + COLORS.borderStrong,
+                  background: COLORS.chip,
+                  color: "inherit",
+                  maxWidth: 260,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                },
+              },
+              "来自盘面：" + originSector,
+              h("span", { style: { color: COLORS.muted, fontSize: 12 } }, "×"),
+            )
+          : null,
+        h(
+          "div",
+          { style: { display: "inline-flex", gap: 4, flexWrap: "wrap" } },
+          HUB_KIND_CHIPS.map(function (chip) {
+            var on = filters.kind === chip.id;
+            return h(
+              "button",
+              {
+                key: chip.id || "all",
+                type: "button",
+                "data-wallstreet-news-kind": chip.id || "all",
+                onClick: function () {
+                  var next = Object.assign({}, filters, { kind: chip.id });
+                  setFilters(next);
+                  scheduleLoad(next, 0);
+                },
+                style: {
+                  font: "inherit",
+                  padding: "3px 10px",
+                  borderRadius: 999,
+                  fontSize: 11.5,
+                  cursor: "pointer",
+                  border: "1px solid " + (on ? COLORS.border : "transparent"),
+                  background: on ? COLORS.chip : "transparent",
+                  color: on ? "inherit" : COLORS.muted,
+                },
+              },
+              chip.label,
+            );
+          }),
+        ),
+        h("input", {
+          type: "search",
+          value: filters.q,
+          placeholder: "关键词：标题 / 摘要",
+          "data-wallstreet-news-query": "",
+          onChange: function (event) {
+            var next = Object.assign({}, filters, { q: event.target.value });
+            setFilters(next);
+            scheduleLoad(next, 250);
+          },
+          style: {
+            font: "inherit",
+            flex: "1 1 160px",
+            minWidth: 0,
+            maxWidth: 240,
+            padding: "5px 9px",
+            borderRadius: 7,
+            border: "1px solid " + COLORS.border,
+            background: "transparent",
+            color: "inherit",
+            fontSize: 12.5,
+          },
+        }),
+        h("input", {
+          type: "search",
+          value: filters.ticker,
+          placeholder: "个股代码：600519",
+          inputMode: "numeric",
+          "data-wallstreet-news-ticker": "",
+          onChange: function (event) {
+            var next = Object.assign({}, filters, { ticker: event.target.value });
+            setFilters(next);
+            scheduleLoad(next, 250);
+          },
+          style: {
+            font: "inherit",
+            flex: "0 1 150px",
+            minWidth: 0,
+            padding: "5px 9px",
+            borderRadius: 7,
+            border: "1px solid " + COLORS.border,
+            background: "transparent",
+            color: "inherit",
+            fontSize: 12.5,
+          },
+        }),
+        h("input", {
+          type: "search",
+          value: filters.sector,
+          placeholder: "板块：如 半导体",
+          "data-wallstreet-news-sector": "",
+          onChange: function (event) {
+            // 手输板块名说明不看盘面那一个了，把盘面带的板块代码丢掉，回到关键词口径。
+            var next = Object.assign({}, filters, { sector: event.target.value, sectorCode: "" });
+            setFilters(next);
+            scheduleLoad(next, 250);
+          },
+          style: {
+            font: "inherit",
+            flex: "0 1 150px",
+            minWidth: 0,
+            padding: "5px 9px",
+            borderRadius: 7,
+            border: "1px solid " + COLORS.border,
+            background: "transparent",
+            color: "inherit",
+            fontSize: 12.5,
+          },
+        }),
+        hasFilters ? h(ToolbarButton, { action: "news-clear", onClick: clearFilters }, "清除筛选") : null,
+        h("span", { style: { flex: 1 } }),
+        payload
+          ? h(
+              "span",
+              { style: { fontSize: 11.5, color: COLORS.muted, fontVariantNumeric: "tabular-nums" } },
+              "匹配 " + hubCountText(payload.total) + " · 显示 " + events.length,
+            )
+          : null,
+      );
+
+      var staleError =
+        payload && feed.error
+          ? h("div", { style: { fontSize: 12, color: COLORS.down } }, feed.error + "（显示的是上一次成功的数据）")
+          : null;
+
+      var listBlock;
+      if (!payload && feed.loading) {
+        listBlock = h("div", { style: { padding: "14px 0", fontSize: 12.5, color: COLORS.muted } }, "正在拉取资讯事件…");
+      } else if (!payload && feed.error) {
+        listBlock = h(
+          "div",
+          { style: { padding: "14px 0", fontSize: 13 } },
+          h("div", { style: { color: COLORS.muted, marginBottom: 8 } }, feed.error),
+          h(
+            ToolbarButton,
+            {
+              action: "news-retry",
+              primary: true,
+              onClick: function () {
+                load();
+              },
+            },
+            "重试",
+          ),
+        );
+      } else if (!events.length) {
+        listBlock = h(
+          EmptyHint,
+          null,
+          hasFilters ? "没有匹配的资讯事件，换个关键词或点「清除筛选」" : "库里还没有资讯事件，点「立即同步」跑一轮入站",
+        );
+      } else {
+        listBlock = h(
+          "div",
+          { style: { display: "flex", flexDirection: "column" } },
+          events.map(function (event, index) {
+            var rowId = event && event.id ? String(event.id) : "row-" + index;
+            return h(NewsEventRow, {
+              key: rowId,
+              event: event,
+              expanded: expanded === rowId,
+              onToggle: function () {
+                setExpanded(expanded === rowId ? "" : rowId);
+              },
+            });
+          }),
+        );
+      }
+
+      return h(
+        "div",
+        {
+          "data-dsh-wallstreet-news": "",
+          style: {
+            padding: "12px 16px 26px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            overflowY: "auto",
+            minHeight: 0,
+            flex: 1,
+          },
+        },
+        statBar,
+        h(HubFrontpage, {
+          data: frontpage.data,
+          error: frontpage.error,
+          refreshing: !!frontpage.loading,
+          collapsed: !!frontpage.collapsed,
+          compact: !!props.compact,
+          onRefresh: loadFrontpage,
+          onDigest: exportDigest,
+          onPublish: publishDigest,
+          publishing: !!frontpage.publishing,
+          digesting: !!frontpage.digesting,
+          digestMessage: frontpage.digestMessage,
+          onToggle: function () {
+            setFrontpage(function (previous) {
+              return Object.assign({}, previous, { collapsed: !previous.collapsed });
+            });
+          },
+        }),
+        h(HubModelBar),
+        healthCard,
+        sourceConfigCard,
+        sync.error ? h("div", { style: { fontSize: 12, color: COLORS.down } }, sync.error) : null,
+        filterRow,
+        staleError,
+        listBlock,
+        h(
+          "div",
+          { style: { fontSize: 11.5, color: COLORS.faint, lineHeight: 1.7, paddingTop: 2 } },
+          "资讯来自新浪财经、华尔街见闻、巨潮公告、东财公告/研报、国务院政策等公开源；同事件多源聚簇，「N 家」表示有 N 个源报道，重要度由规则打分（≥70 标红）。点开一条可看簇内各源原文链接。",
+          h("br"),
+          "仅供研究参考，不构成投资建议。",
         ),
       );
     }
@@ -2401,6 +4594,346 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /* ------------------------------ 策略视图（迁移自 vectra 口径） ------------------------------ */
+
+    var PROFILE_OPTIONS = [
+      { id: "10w", label: "10 万本金" },
+      { id: "50w", label: "50 万本金" },
+    ];
+
+    var LOSS_KIND_LABELS = {
+      stock: "个股",
+      sectorETF: "行业 ETF",
+      broadETF: "宽基 ETF",
+      convertible: "可转债",
+    };
+
+    var INPUT_STYLE = {
+      padding: "4px 8px",
+      fontSize: 12.5,
+      borderRadius: 7,
+      border: "1px solid " + COLORS.border,
+      background: "transparent",
+      color: "inherit",
+      font: "inherit",
+      width: 138,
+    };
+
+    function fmtPct(value, digits) {
+      var number = Number(value);
+      if (!Number.isFinite(number)) return "—";
+      return (number * 100).toFixed(digits == null ? 1 : digits) + "%";
+    }
+
+    function fmtWan(value) {
+      var number = Number(value);
+      if (!Number.isFinite(number) || number <= 0) return "—";
+      return (number / 10000).toFixed(number % 10000 === 0 ? 0 : 1) + " 万";
+    }
+
+    function StrategyTable(props) {
+      var cellStyle = {
+        padding: "5px 8px",
+        borderBottom: "1px solid " + COLORS.border,
+        fontSize: 12.5,
+        fontVariantNumeric: "tabular-nums",
+      };
+      return h(
+        "table",
+        { style: { width: "100%", borderCollapse: "collapse" } },
+        h(
+          "thead",
+          null,
+          h(
+            "tr",
+            null,
+            props.head.map(function (label, index) {
+              return h(
+                "th",
+                {
+                  key: index,
+                  style: Object.assign({}, cellStyle, {
+                    textAlign: index === 0 ? "left" : "right",
+                    color: COLORS.muted,
+                    fontWeight: 500,
+                    borderBottom: "1px solid " + COLORS.borderStrong,
+                  }),
+                },
+                label,
+              );
+            }),
+          ),
+        ),
+        h(
+          "tbody",
+          null,
+          props.rows.map(function (row, rowIndex) {
+            return h(
+              "tr",
+              { key: rowIndex },
+              row.map(function (cell, cellIndex) {
+                return h(
+                  "td",
+                  {
+                    key: cellIndex,
+                    style: Object.assign({}, cellStyle, {
+                      textAlign: cellIndex === 0 ? "left" : "right",
+                      whiteSpace: cellIndex === row.length - 1 && props.wideLast ? "normal" : "nowrap",
+                    }),
+                  },
+                  cell == null ? "—" : String(cell),
+                );
+              }),
+            );
+          }),
+        ),
+      );
+    }
+
+    function StrategyView(props) {
+      var profileState = react.useState("10w");
+      var profile = profileState[0];
+      var setProfile = profileState[1];
+      var detailState = react.useState({ loading: true, error: "", data: null });
+      var detail = detailState[0];
+      var setDetail = detailState[1];
+      var gridInputState = react.useState({ last: "", capital: "" });
+      var gridInput = gridInputState[0];
+      var setGridInput = gridInputState[1];
+      var gridState = react.useState({ loading: false, error: "", data: null });
+      var grid = gridState[0];
+      var setGrid = gridState[1];
+      var onMetaRef = react.useRef(props.onMeta);
+      onMetaRef.current = props.onMeta;
+
+      var load = react.useCallback(
+        function () {
+          var alive = true;
+          setDetail(function (prev) {
+            return { loading: true, error: "", data: prev.data };
+          });
+          fetch(API + "/strategy/overview?profile=" + encodeURIComponent(profile), {
+            headers: { accept: "application/json" },
+            credentials: "same-origin",
+          })
+            .then(function (res) {
+              if (!res.ok) throw new Error("HTTP " + res.status);
+              return res.json();
+            })
+            .then(function (json) {
+              if (!alive) return;
+              if (!json || json.ok === false) throw new Error((json && json.error) || "口径接口返回异常");
+              setDetail({ loading: false, error: "", data: json });
+              if (onMetaRef.current) onMetaRef.current({ loading: false, fetchedAt: new Date().toISOString(), dataDate: json.profile || "" });
+            })
+            .catch(function (error) {
+              if (!alive) return;
+              setDetail({ loading: false, error: String((error && error.message) || error), data: null });
+              if (onMetaRef.current) onMetaRef.current({ loading: false, fetchedAt: new Date().toISOString(), dataDate: "" });
+            });
+          return function () {
+            alive = false;
+          };
+        },
+        [profile],
+      );
+
+      react.useEffect(load, [load]);
+      react.useEffect(
+        function () {
+          if (props.registerReload) props.registerReload(load);
+        },
+        [load, props.registerReload],
+      );
+
+      var runGrid = function () {
+        var last = Number(gridInput.last);
+        if (!(last > 0)) {
+          setGrid({ loading: false, error: "先填一个当前价，比如 3.002", data: null });
+          return;
+        }
+        var capital = Number(gridInput.capital);
+        var query = "?last=" + encodeURIComponent(last);
+        if (capital > 0) query += "&capital=" + encodeURIComponent(capital);
+        setGrid({ loading: true, error: "", data: grid.data });
+        fetch(API + "/strategy/grid" + query, { headers: { accept: "application/json" }, credentials: "same-origin" })
+          .then(function (res) {
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            return res.json();
+          })
+          .then(function (json) {
+            if (!json || json.ok === false) throw new Error((json && json.error) || "网格接口返回异常");
+            setGrid({ loading: false, error: "", data: json });
+          })
+          .catch(function (error) {
+            setGrid({ loading: false, error: String((error && error.message) || error), data: null });
+          });
+      };
+
+      var data = detail.data;
+      if (!data) {
+        return h(
+          "div",
+          { style: { padding: 28, fontSize: 13 } },
+          detail.loading
+            ? "正在读取策略口径…"
+            : h("div", { style: { color: COLORS.down } }, detail.error || "策略口径为空"),
+        );
+      }
+
+      var rules = data.rules || {};
+      var valuation = rules.valuation;
+      var circuit = rules.circuitBreaker || {};
+      var pyramid = rules.pyramid || [];
+
+      var profileSwitch = h(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+        PROFILE_OPTIONS.map(function (option) {
+          var active = option.id === data.profile;
+          return h(
+            "button",
+            {
+              key: option.id,
+              type: "button",
+              "data-dsh-wallstreet-profile": option.id,
+              onClick: function () {
+                setProfile(option.id);
+              },
+              style: {
+                padding: "4px 12px",
+                fontSize: 12.5,
+                borderRadius: 999,
+                border: "1px solid " + COLORS.border,
+                background: active ? COLORS.chip : "transparent",
+                color: "inherit",
+                font: "inherit",
+                cursor: "pointer",
+              },
+            },
+            option.label,
+          );
+        }),
+        h("span", { style: { fontSize: 11.5, color: COLORS.muted } }, data.label),
+        h("span", { style: { flex: 1 } }),
+        h(Tag, null, "组合目标年化 " + Number(data.blendedTarget).toFixed(1) + "%"),
+        detail.loading ? h(Tag, null, "更新中…") : null,
+      );
+
+      var allocationRows = (data.rows || []).map(function (row) {
+        return [row.label, Number(row.weightPct).toFixed(1) + "%", fmtWan(row.amount), (row.targetReturn * 100).toFixed(1) + "%", row.tools];
+      });
+
+      var ruleLines = [
+        "单票上限 " + fmtPct(rules.singleStockMax, 0) + " · 单行业上限 " + fmtPct(rules.singleSectorMax, 0),
+        "核心底仓下限 " + fmtPct(rules.coreMin, 0) + " · 现金下限 " + fmtPct(rules.cashMin, 0),
+        "再平衡触发：偏离目标 " + fmtPct(rules.rebalanceDeviation, 0) + " 以上",
+        "金字塔加仓：" +
+          pyramid
+            .map(function (part) {
+              return (part * 100).toFixed(0) + "%";
+            })
+            .join(" / "),
+        valuation
+          ? "估值开关：沪深300 PE < " +
+            valuation.lowPe +
+            " 加仓核心至 " +
+            fmtPct(valuation.lowPeCoreWeight, 0) +
+            "，PE > " +
+            valuation.highPe +
+            " 减至 " +
+            fmtPct(valuation.highPeCoreWeight, 0)
+          : null,
+        "年度熔断：" + fmtPct(circuit.pause, 0) + " 停手 1 个月 · " + fmtPct(circuit.liquidateSatellite, 0) + " 清仓卫星",
+      ].filter(Boolean);
+
+      var stopRows = (data.stopLoss || []).map(function (row) {
+        return [
+          LOSS_KIND_LABELS[row.kind] || row.kind,
+          row.review == null ? "不止损" : fmtPct(row.review, 0) + " 评估",
+          row.cut == null ? (row.review == null ? "不止损" : "只评估") : fmtPct(row.cut, 0) + " 强平",
+        ];
+      });
+
+      var gridCard = h(
+        "div",
+        null,
+        h(
+          "div",
+          { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" } },
+          h("input", {
+            type: "number",
+            step: "0.001",
+            placeholder: "当前价（如 3.002）",
+            value: gridInput.last,
+            onChange: function (event) {
+              setGridInput({ last: event.target.value, capital: gridInput.capital });
+            },
+            style: INPUT_STYLE,
+          }),
+          h("input", {
+            type: "number",
+            step: "1000",
+            placeholder: "可用资金（可选）",
+            value: gridInput.capital,
+            onChange: function (event) {
+              setGridInput({ last: gridInput.last, capital: event.target.value });
+            },
+            style: INPUT_STYLE,
+          }),
+          h(ToolbarButton, { action: "grid", onClick: runGrid, primary: true, disabled: grid.loading }, grid.loading ? "测算中…" : "测算网格"),
+        ),
+        grid.error ? h("div", { style: { marginTop: 8, fontSize: 12, color: COLORS.down } }, grid.error) : null,
+        grid.data
+          ? h(
+              "div",
+              { style: { marginTop: 10, display: "grid", gap: 8 } },
+              h("div", { style: { fontSize: 12, color: COLORS.muted, lineHeight: 1.7 } }, grid.data.note),
+              h(StrategyTable, {
+                head: ["档位", "价格", "每档资金", "单格净收益"],
+                rows: (grid.data.levels || []).map(function (level) {
+                  return [
+                    String(level.index + 1),
+                    Number(level.price).toFixed(3),
+                    fmtWan(level.amount),
+                    grid.data.roundTrip ? grid.data.roundTrip.netPct + "%" : "—",
+                  ];
+                }),
+              }),
+            )
+          : null,
+      );
+
+      return h(
+        "div",
+        { style: { padding: "14px 16px 40px", display: "flex", flexDirection: "column", gap: 12, overflowY: "auto", minHeight: 0, flex: 1 } },
+        profileSwitch,
+        h(
+          SectionCard,
+          { title: "资产配置", hint: "四桶结构 · 金额按本金折算" },
+          h(StrategyTable, { head: ["桶", "权重", "金额", "目标收益", "工具"], rows: allocationRows, wideLast: true }),
+        ),
+        h(
+          SectionCard,
+          { title: "风控红线", hint: "来自 vectra 文档口径" },
+          h(
+            "ul",
+            { style: { margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.9 } },
+            ruleLines.map(function (line, index) {
+              return h("li", { key: index }, line);
+            }),
+          ),
+        ),
+        h(SectionCard, { title: "止损分级", hint: "负值按成本价计算" }, h(StrategyTable, { head: ["类型", "预警", "处理"], rows: stopRows })),
+        h(SectionCard, { title: "网格测算", hint: "默认区间 ±5%（vectra 总区间 10%）" }, gridCard),
+        h(
+          "div",
+          { style: { fontSize: 11.5, color: COLORS.faint, lineHeight: 1.7 } },
+          "口径来自 openclaw:/root/vectra 的《个人投资策略方案》与《10 万本金版》，已抽成纯函数 lib/strategy.js。面板只做测算与展示，不接券商、不下单，不构成投资建议。",
+        ),
+      );
+    }
+
     function Dashboard(props) {
       var overview = useOverview();
       var data = overview.data;
@@ -2419,13 +4952,43 @@ window.__ModuleLoader__.load({
       var researchMetaState = react.useState(emptyMeta);
       var researchMeta = researchMetaState[0];
       var setResearchMeta = researchMetaState[1];
+      var newsMetaState = react.useState(emptyMeta);
+      var newsMeta = newsMetaState[0];
+      var setNewsMeta = newsMetaState[1];
       var movesReloadRef = react.useRef(null);
       var researchReloadRef = react.useRef(null);
+      var newsReloadRef = react.useRef(null);
+      var strategyReloadRef = react.useRef(null);
+      var strategyMetaState = react.useState(emptyMeta);
+      var strategyMeta = strategyMetaState[0];
+      var setStrategyMeta = strategyMetaState[1];
       var stockState = react.useState(null);
       var selectedStock = stockState[0];
       var setSelectedStock = stockState[1];
+      // 盘面「板块轮动」→ 资讯：{ sector, seq }，seq 递增保证重复点同一个板块也能重新应用筛选。
+      var sectorPickState = react.useState(null);
+      var sectorPick = sectorPickState[0];
+      var setSectorPick = sectorPickState[1];
+      var pickSector = function (name, code) {
+        var sectorName = name ? String(name).trim() : "";
+        if (!sectorName) return;
+        var sectorCode = code && /^BK\d+$/.test(String(code)) ? String(code) : "";
+        setSectorPick(function (previous) {
+          return { sector: sectorName, code: sectorCode, seq: previous && isNum(previous.seq) ? previous.seq + 1 : 1 };
+        });
+        setView("news");
+      };
 
-      var activeMeta = view === "moves" ? movesMeta : view === "research" ? researchMeta : null;
+      var activeMeta =
+        view === "moves"
+          ? movesMeta
+          : view === "research"
+            ? researchMeta
+            : view === "strategy"
+              ? strategyMeta
+              : view === "news"
+                ? newsMeta
+                : null;
       var activeLoading = view === "market" ? !!overview.loading : !!(activeMeta && activeMeta.loading);
 
       var refresh = function () {
@@ -2435,6 +4998,14 @@ window.__ModuleLoader__.load({
         }
         if (view === "research") {
           if (researchReloadRef.current) researchReloadRef.current();
+          return;
+        }
+        if (view === "strategy") {
+          if (strategyReloadRef.current) strategyReloadRef.current();
+          return;
+        }
+        if (view === "news") {
+          if (newsReloadRef.current) newsReloadRef.current();
           return;
         }
         overview.reload();
@@ -2462,18 +5033,30 @@ window.__ModuleLoader__.load({
               ? "盘中实时 · " + (movesMeta.dataTime || "刚刚") + " 更新"
               : "收盘快照 · " + (movesMeta.dataDate || movesMeta.fetchedAt.slice(0, 10))
             : "—";
-      } else {
+      } else if (view === "research") {
         freshness = researchMeta.loading
           ? "读取中…"
           : researchMeta.fetchedAt
             ? "归档 " + researchMeta.fetchedAt.slice(0, 16)
             : "—";
+      } else if (view === "news") {
+        freshness = newsMeta.loading
+          ? "同步中…"
+          : newsMeta.lastIngestAt
+            ? "同步 " + timeText(newsMeta.lastIngestAt).slice(0, 5)
+            : newsMeta.fetchedAt
+              ? "未同步"
+              : "—";
+      } else {
+        freshness = strategyMeta.loading ? "读取中…" : strategyMeta.fetchedAt ? "口径就绪 · " + strategyMeta.fetchedAt.slice(11, 16) : "—";
       }
 
       var subtitles = {
         market: data && data.dataMode === "live" ? "今日盘面 · 盘中实时" : "今日盘面 · 收盘快照",
         moves: movesMeta.dataMode === "live" ? "个股与资金异动 · 盘中实时" : "个股与资金异动 · 收盘快照",
+        news: "多源资讯事件流 · 自动同步",
         research: "研究结论与慢数据 · 只读归档",
+        strategy: "策略口径 · 只做测算，不下单",
       };
 
       var toolbar = h(
@@ -2496,7 +5079,9 @@ window.__ModuleLoader__.load({
           tabs: [
             { id: "market", label: "盘面" },
             { id: "moves", label: "异动" },
+            { id: "news", label: "资讯" },
             { id: "research", label: "研究" },
+            { id: "strategy", label: "策略" },
           ],
         }),
         tight ? null : h("span", { style: { fontSize: 12, color: COLORS.muted } }, subtitles[view] || ""),
@@ -2504,9 +5089,23 @@ window.__ModuleLoader__.load({
         h(StatusBadge, { trading: data ? data.trading : null }),
         h(
           "span",
-          { "data-dsh-wallstreet-freshness": "", style: { fontSize: 11.5, color: COLORS.muted, fontVariantNumeric: "tabular-nums" } },
+          {
+            "data-dsh-wallstreet-freshness": "",
+            title: (function () {
+              var parts = data && Array.isArray(data.parts) ? data.parts : [];
+              if (parts.length === 0) return "";
+              // 每个分区的耗时/错误码：面板上不铺开，hover 能看就够。
+              return parts
+                .map(function (part) {
+                  return part.id + " " + (part.ok ? (part.stale ? "缓存" : "ok") : part.error || "失败") + " " + part.ms + "ms";
+                })
+                .join("\n");
+            })(),
+            style: { fontSize: 11.5, color: COLORS.muted, fontVariantNumeric: "tabular-nums" },
+          },
           freshness,
         ),
+        data && data.partsStale ? h(Tag, null, "部分缓存") : null,
         h(
           ToolbarButton,
           { action: "refresh", onClick: refresh, disabled: activeLoading, primary: true },
@@ -2615,10 +5214,12 @@ window.__ModuleLoader__.load({
                 SectionCard,
                 {
                   title: "板块轮动",
-                  hint: data.dataMode === "live" ? "东财实时行业板块 · 按涨跌幅" : "market-report 行业板块 · 按涨跌幅",
+                  hint:
+                    (data.dataMode === "live" ? "东财实时行业板块 · 按涨跌幅" : "market-report 行业板块 · 按涨跌幅") +
+                    " · 点行看资讯",
                   extra: h(Tag, null, data.dataMode === "live" && data.sources && data.sources.sectors === "live" ? "盘中实时" : "收盘快照"),
                 },
-                h(SectorCard, { sectors: data.sectors, compact: tight }),
+                h(SectorCard, { sectors: data.sectors, compact: tight, onPickSector: pickSector }),
               ),
             ),
           );
@@ -2683,12 +5284,32 @@ window.__ModuleLoader__.load({
           onMeta: setMovesMeta,
           onPickStock: setSelectedStock,
         });
+      } else if (view === "news") {
+        body = h(NewsHub, {
+          registerReload: function (fn) {
+            newsReloadRef.current = fn;
+          },
+          onMeta: setNewsMeta,
+          initialSector: sectorPick ? sectorPick.sector : "",
+          initialSectorCode: sectorPick ? sectorPick.code || "" : "",
+          initialSectorSeq: sectorPick && isNum(sectorPick.seq) ? sectorPick.seq : 0,
+          onClearInitialSector: function () {
+            setSectorPick(null);
+          },
+        });
       } else if (view === "research") {
         body = h(ResearchPanel, {
           registerReload: function (fn) {
             researchReloadRef.current = fn;
           },
           onMeta: setResearchMeta,
+        });
+      } else if (view === "strategy") {
+        body = h(StrategyView, {
+          registerReload: function (fn) {
+            strategyReloadRef.current = fn;
+          },
+          onMeta: setStrategyMeta,
         });
       }
 
