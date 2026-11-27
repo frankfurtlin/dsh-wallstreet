@@ -39,9 +39,11 @@
 
 ## 安装
 
+下面的命令假设仓库检出在 `/opt/dsh/dsh-wallstreet`，放在别处就替换成实际路径。
+
 ```bash
-# DSH 插件页 → 添加插件 → 填 /root/workspace/plugins/dsh-wallstreet → 安装 → 打开开关
-# 或：plugin_manager install_bundle, target=/root/workspace/plugins/dsh-wallstreet
+# DSH 插件页 → 添加插件 → 填 /opt/dsh/dsh-wallstreet → 安装 → 打开开关
+# 或：plugin_manager install_bundle, target=/opt/dsh/dsh-wallstreet
 systemctl restart deepseek-harness   # 让新的 cordis patch 生效
 ```
 
@@ -60,7 +62,7 @@ systemctl restart deepseek-harness   # 让新的 cordis patch 生效
 2. **盘中慢数据**：龙虎榜、两融、估值、OMO 等收盘后才产生的数据仍取最新收盘快照，
    页头与分区角标会标出「收盘快照」。
 3. **盘后（含周末/盘前）**：全部改用 market-report 每日 15:10 落盘的
-   `data/market_data.json`（本插件 data/ 下，采集管线写入）与 `/root/flow_full.json`，
+   `data/market_data.json`（本插件 data/ 下，采集管线写入）与 `~/flow_full.json`，
    并标注快照日期与抓取时间。
 
 首页头部右上角统一显示当前口径：盘中是「盘中实时 · HH:MM 更新」，盘后是
@@ -225,11 +227,11 @@ A 股日内成交分布锚点（开盘半小时最密、午盘清淡、尾盘放
 
 ## 研究（只读归档）
 
-`/root/workspace/quant` 已于 2026-11-12 整体删除。为保住每日数据与既有研究产出，做了两件事：
+`~/workspace/quant` 已于 2026-11-12 整体删除。为保住每日数据与既有研究产出，做了两件事：
 
-1. **每日采集/日报管线迁出**为独立管线 `/root/scripts/market-report`（cron 任务不变：
+1. **每日采集/日报管线迁出**为独立管线 `~/scripts/market-report`（cron 任务不变：
    每交易日 15:10 由 Hermes 执行 `~/.hermes/scripts/run_market_report.sh`，产出
-   `/root/market_data.json`、`/root/flow_full.json` 与 betterlife 日报）。
+   `~/market_data.json`、`~/flow_full.json` 与 betterlife 日报）。
 2. **研究快照随插件归档**在 `data/quant-archive/`（结论文档、34 份回测结果、持仓集中度
    快照，共约 150KB）——研究结论是 2026-11-12 的冻结口径，不再随时间更新。
 
@@ -238,9 +240,9 @@ A 股日内成交分布锚点（开盘半小时最密、午盘清淡、尾盘放
 | 分区 | 来源 | 内容 |
 | --- | --- | --- |
 | 研究结论 | `data/quant-archive/docs/CONCLUSION.md` + `data/quant-archive/backtests/results/*.json` | 一句话结论、两条前提、有效/边缘/无效计数、34 份回测按 `act_t` 降序（归档快照） |
-| 估值分位 / 两融 / 期货商品 | `/root/market_data.json`（交易日 15:11 更新） | PE(TTM) 历史分位、沪深两融、股指期货、BC 指数与沪金/沪银/沪铜/沪铝 |
+| 估值分位 / 两融 / 期货商品 | `~/market_data.json`（交易日 15:11 更新） | PE(TTM) 历史分位、沪深两融、股指期货、BC 指数与沪金/沪银/沪铜/沪铝 |
 | 持仓集中度 | `data/quant-archive/data/holdings_concentration_<date>.json` | 分组权重、HHI、风险簇权重与 alerts；快照过期会显示年龄提示（归档快照） |
-| 新闻/公告 | `/root/market_data.json` | 央行 OMO、财联社电报、公告与快讯 |
+| 新闻/公告 | `~/market_data.json` | 央行 OMO、财联社电报、公告与快讯 |
 | 市场情绪历史 | `data/market_daily_snapshot.jsonl`（插件 data/ 下）（近 40 个交易日） | 涨停/跌停家数双折线 + 两市成交额走势；纵轴按 90 分位缩放，峰值单独标注 |
 
 市场数据文件由 market-report 管线每日更新，因此面板不轮询，只提供「刷新」按钮；管线
@@ -337,11 +339,16 @@ quant 接口（同前缀 `/wallstreet/api`）：
 | `/trend?secid=1.000001` | 单个指数的分时 |
 | `/indices` | 指数清单（secid/code/name/group） |
 | `/health` | 上游连通性自检 |
+| `/ask`（POST） | 盘面 AI 问答：请求体 `{question, history[]}`，SSE 流式返回 `delta` / `done` / `error`。上下文由服务端取当前 `/overview`（与页面同源），客户端不用传数据；每分钟 12 次限流 |
 
 量化研究接口（二期）见上一节。
 
 鉴权：所有请求先过 `ctx.connection.requestRejection(req)`——Host/Origin 不在信任
 列表返回 403，未登录返回 401；不存在绕过登录的路径。
+
+盘面 AI 问答的数据口径：服务端在每次提问时重新读 `/overview`（宿主 60s 缓存），
+把指数、宽度、涨停跌停、成交额、板块强弱、温度、上证均线与数据时间压成一段上下文
+再交给模型；页面停在旧数据时，回答仍以服务端最新数据为准，并在正文里标注数据时间。
 
 ## 安装 / 卸载
 
@@ -349,7 +356,7 @@ quant 接口（同前缀 `/wallstreet/api`）：
 
 ```bash
 # 安装（包目录即 link: 依赖，不发布 npm）
-# plugin_manager: action=install_bundle, target=/root/workspace/plugins/dsh-wallstreet
+# plugin_manager: action=install_bundle, target=/opt/dsh/dsh-wallstreet
 # 之后重启 deepseek-harness 让新的 bundle patch 生效
 
 # 卸载
@@ -359,13 +366,14 @@ quant 接口（同前缀 `/wallstreet/api`）：
 ## 本地验证
 
 ```bash
-cd /root/workspace/plugins/dsh-wallstreet
+cd /opt/dsh/dsh-wallstreet
 npm run check              # node --check 全部宿主/客户端文件
 npm run verify:api         # 打真实上游，断言数据形状与关键字段
 npm run verify:quant-api   # 走 DSH cookie，断言 /wallstreet/api/quant/*
 npm test                   # 335 个纯函数单测（node:test，按模块拆 12 个文件）
 npm run verify:sources     # 12 个资讯源逐源实测（条数/字段/耗时/错误）
 npm run verify:hub         # 资讯中心端到端：入库→聚簇→打标→查询→工具（含真实上游）
+npm run verify:ask        # 盘面 AI 问答：真实调模型，约 1–2 分钟（含多轮追问）
 SKIP_LIVE=1 npm run verify:hub   # 只跑离线段（无网环境）
 
 # DSH 内浏览器验收（Playwright headless，token 从 dsh web 启动日志取）
@@ -382,22 +390,22 @@ journalctl -u deepseek-harness --no-pager --since today | grep -o 'token=[A-Za-z
 
 ### 后端改动如何生效（HMR 优先，重启兜底）
 
-**2026-11-25 实测可行的快捷方式**：在 `/root/.dsh/profiles/web/cordis.patch.yml` 末尾追加一行注释
+**2026-11-25 实测可行的快捷方式**：在 `~/.dsh/profiles/web/cordis.patch.yml` 末尾追加一行注释
 （等价于 touch 该文件）会触发 `dsh-hmr` 就地重载本插件——宿主 PID 不变、当前回合不中断，
 几秒后日志出现 `[dsh-wallstreet] 资讯库就绪` 与新一批 `hub xxx: N 条` 即生效。本次资讯中心的
 多轮迭代就是这么上的（含客户端半：刷新页面即可）。
 
 HMR 不生效或改了 profile/依赖时，仍要重启宿主：`lib/*.js` 是宿主端代码，改完必须重启
 `deepseek-harness` 才生效；在回合内直接重启会打断
-正在跑的回合。用 `/root/workspace/tools/dsh-reload-when-idle.mjs`：按会话事件判定空闲
+正在跑的回合。用 `~/workspace/tools/dsh-reload-when-idle.mjs`：按会话事件判定空闲
 （最后一条事件是 `turn/end` 之类才算空闲，长工具调用期间不会被误判），空闲 10 分钟后重启，
 脚本必须跑在独立 cgroup（`systemd-run`）里，否则会跟着服务一起被杀：
 
 ```bash
 systemd-run --unit=dsh-reload-when-idle --collect \
-  /root/.nvm/versions/node/v24.21.0/bin/node /root/workspace/tools/dsh-reload-when-idle.mjs --idle-sec=600
+  node ~/workspace/tools/dsh-reload-when-idle.mjs --idle-sec=600
 cat /tmp/dsh-reload-when-idle.log                              # 判定过程与重启结果
-node /root/workspace/tools/dsh-reload-when-idle.mjs --once     # 只看当前是否空闲
+node ~/workspace/tools/dsh-reload-when-idle.mjs --once     # 只看当前是否空闲
 ```
 
 盘中复验可以用假时钟另起临时实例，不打断主会话：
@@ -444,7 +452,7 @@ DSH_WEB_URL=http://127.0.0.1:3090 node verification/verify-ui.mjs --token=...
 
 ### 验收结果（2026-11-12 15:15，quant 删除 + 管线迁移后）
 
-`/root/workspace/quant` 已删除，采集/渲染管线迁到 `/root/scripts/market-report`（2026-11-25 再次迁到 scripts/，数据落到插件 data/）：
+`~/workspace/quant` 已删除，采集/渲染管线迁到 `~/scripts/market-report`（2026-11-25 再次迁到 scripts/，数据落到插件 data/）：
 迁移后的完整 cron 流程实跑一次，**QC 16/16 PASS**，15:14:41 生成并部署
 `reports/20261112/a-share-market-overview-20261112.html`；dsh-kb 已自动收录
 （标题「A股市场全景分析报告 | 2026-11-12 收盘」）。研究快照归档在 `data/quant-archive/`。
@@ -464,7 +472,7 @@ DSH_WEB_URL=http://127.0.0.1:3090 node verification/verify-ui.mjs --token=...
   （概览代码路径本次未改动）。
 
 备份：删除前把配置/脚本/文档/回测结果/数据快照打包为
-`/root/workspace/archive/quant-2026-11-12.tar.gz`（1.5MB，回测缓存与站点产物已排除）。
+`~/workspace/archive/quant-2026-11-12.tar.gz`（1.5MB，回测缓存与站点产物已排除）。
 
 ### 验收结果（2026-11-12 16:10，三 tab 重构后，临时实例 3090）
 
@@ -594,6 +602,8 @@ verification/           # verify-api.mjs / verify-ui.mjs / verify-quant-api.mjs 
 - 历史日报不在本插件内展示（2026-11-12 移除）；日报仍由 cron 落入 `betterlife/reports`，
   dsh-kb 会自动收录，查询请走知识库页面。
 - quant 的结论本身是研究口径（含幸存者偏差、α 视为上界），面板不做再加工，也不构成投资建议。
+- 盘面 AI 问答会真实消耗宿主模型额度（单次约 500–1200 输出 token），不做结果缓存；
+  每分钟限 12 次，同一问题反复问会重复计费。
 
 ## 二期候选（未实现）
 
@@ -691,3 +701,19 @@ verification/           # verify-api.mjs / verify-ui.mjs / verify-quant-api.mjs 
 | 盘面四态 | ✅ `parts[]` 每分区耗时/状态，失败有旧值时 `stale` 兜底，超时不取消并落缓存 |
 | 日报 | ✅ 面板「导出日报」10.8 KB / 1621 条；「发到知识库」实测 `doc/6b06df33a756504f` 可查 |
 | 头版 | ✅ 要闻 5 条 / 板块热度 3 个 / 关注股 3 条（中国铝业、隆基绿能、牧原股份） |
+
+### 验收结果（2026-11-27 14:00，盘面 AI 问答接入，主服务 3080）
+
+环境：`deepseek-harness` PID 1350301 未重启，编辑 profile patch 触发 HMR 就地重载。
+提问时刻为盘中（13:56），数据口径为实时。
+
+| 项 | 结果 |
+| --- | --- |
+| `npm test` | ✅ **341/341**（新增 `test/ask.test.mjs` 6 条：上下文压缩、体积预算、入参裁剪、提示词约束） |
+| `npm run check` | ✅ 20 个 lib 文件 + client.js（新增 `lib/ask.js`、`lib/hub/llm.js`） |
+| 后端 SSE | ✅ curl 实测：首轮约 60s 出 788 字，追问 11s 出 629 字；`delta` 逐帧、`done` 带 `model`/`dataAt`、`error` 为人话原因 |
+| 数据上下文 | ✅ 每次提问服务端重读 `/overview`（60s 缓存），上下文含指数/宽度/涨跌停/成交/板块/温度/均线/数据时间；盘中时间修正为 `2026-11-27 13:56`（不再拼成快照日期） |
+| 多轮追问 | ✅ 历史并入 user 文本后交给模型（手拼 assistant `Message` 会触发上游 `UNKNOWN`，已修） |
+| 降级 | ✅ 无模型时返回「宿主没有可用的默认模型」；70s 后端看门狗 + 85s 前端兜底 |
+| 浏览器验收 | ✅ `npm run verify:ask` **12/12**：卡片出现、3 个快捷问题、首轮 788 字、带数据时间、两轮提问保留、新对话清空、无失败请求、无 pageerror |
+| 截图 | `verification/shots/ask-empty.png`、`ask-answer.png` |

@@ -31,9 +31,11 @@ Captured during a live session on 2026-11-23 and trimmed here. The interesting p
 
 ## Install
 
+The commands below assume the checkout is at `/opt/dsh/dsh-wallstreet` — substitute your own path if it lives elsewhere.
+
 ```bash
-# Plugins page → Add plugin → /root/workspace/plugins/dsh-wallstreet → Install → enable the switch
-# or from the plugin manager: install_bundle, target=/root/workspace/plugins/dsh-wallstreet
+# Plugins page → Add plugin → /opt/dsh/dsh-wallstreet → Install → enable the switch
+# or from the plugin manager: install_bundle, target=/opt/dsh/dsh-wallstreet
 systemctl restart deepseek-harness   # the new bundle patch applies at startup
 ```
 
@@ -54,7 +56,7 @@ Everything is read-only: no brokerage account, no orders, no user data stored.
 | `MX_APIKEY` | — | Eastmoney Miaoxiang search key, used by `engine=mx` (the default) |
 | `TAVILY_API_KEY` | — | Tavily key, used by `engine=tavily` |
 | `DSH_WALLSTREET_ENV` | `<plugin>/.env.local` | the file the two keys are read from |
-| `DSH_WALLSTREET_MARKET_JSON` | `/root/workspace/plugins/dsh-wallstreet/data/market_data.json` | daily close snapshot behind market, research and history |
+| `DSH_WALLSTREET_MARKET_JSON` | `/opt/dsh/dsh-wallstreet/data/market_data.json` | daily close snapshot behind market, research and history |
 | `DSH_WALLSTREET_SNAPSHOT` | `…/market_daily_snapshot.jsonl` | 40-day sentiment history |
 | `DSH_WALLSTREET_QUANT_ROOT` | `<plugin>/data/quant-archive` | archived conclusion, 34 backtests, holdings snapshots |
 
