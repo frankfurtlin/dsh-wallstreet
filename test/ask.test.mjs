@@ -142,7 +142,9 @@ test('buildMovesContext：涨停结构、连板、行业与资金、龙虎榜', 
     lhb: [{ name: '康芝药业', pct: 20, net: 3.3e7 }],
     warnings: [],
   }
-  const { text, dataAt } = buildMovesContext(moves)
+  // 异动页在 dataMode=live 时用「当天」当日期（marketDate 只是上一交易日快照），
+  // 所以这里固定传入 now，否则断言里的日期会随运行日历漂移（只在 2026-11-27 当天才绿）。
+  const { text, dataAt } = buildMovesContext(moves, { now: Date.parse('2026-11-27T06:10:00Z') })
   assert.equal(dataAt, '2026-11-27 14:10')
   assert.match(text, /当前页面：异动/)
   assert.match(text, /涨停：今日 285 家（前一交易日 51 家）/)
